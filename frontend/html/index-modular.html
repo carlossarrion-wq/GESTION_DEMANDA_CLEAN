@@ -1,0 +1,878 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Planificación de Capacidad - Dashboard Modular</title>
+
+    <!-- Modular CSS -->
+    <link rel="stylesheet" href="../css/base.css">
+    <link rel="stylesheet" href="../css/components.css">
+    <link rel="stylesheet" href="../css/layout.css">
+    <link rel="stylesheet" href="../css/tabs.css">
+    <link rel="stylesheet" href="../css/tables.css">
+    <link rel="stylesheet" href="../css/modal.css">
+    <link rel="stylesheet" href="../css/responsive.css">
+
+    <!-- External Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/moment@2.29.1/moment.min.js"></script>
+
+    <!-- Handsontable for Excel-like interface -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/handsontable@14.1.0/dist/handsontable.full.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/handsontable@14.1.0/dist/handsontable.full.min.js"></script>
+
+    <!-- AG Grid for task management -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@31.0.0/styles/ag-grid.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@31.0.0/styles/ag-theme-alpine.css">
+    <script src="https://cdn.jsdelivr.net/npm/ag-grid-community@31.0.0/dist/ag-grid-community.min.js"></script>
+
+</head>
+
+<body>
+    <div class="header">
+        <div class="header-content">
+            <div class="header-title">
+                <h1>Planificación de Capacidad</h1>
+                <p>Sistema Modular de Gestión de Recursos y Proyectos</p>
+            </div>
+            <div class="header-user-section">
+                <button id="team-name-btn" class="user-info-btn team-btn"></button>
+                <div style="position: relative;">
+                    <button id="user-initial-btn" class="user-info-btn initial-btn"
+                        onclick="toggleUserDropdown()"></button>
+                    <div id="user-dropdown" class="user-dropdown">
+                        <div class="user-dropdown-header">
+                            <div id="dropdown-avatar" class="user-dropdown-avatar"></div>
+                            <div class="user-dropdown-info">
+                                <div id="dropdown-name" class="user-dropdown-name"></div>
+                                <div id="dropdown-email" class="user-dropdown-email"></div>
+                            </div>
+                        </div>
+                        <div class="user-dropdown-divider"></div>
+                        <div class="user-dropdown-section">
+                            <div class="user-dropdown-item user-dropdown-logout" onclick="logout()">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                    stroke-width="1.5" stroke="currentColor" style="width: 20px; height: 20px;">
+                                    <path stroke-linecap="round" stroke-linejoin="round"
+                                        d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 005.25 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
+                                </svg>
+                                Cerrar Sesión
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="tab-container">
+            <div class="tab-buttons">
+                <button class="tab-button active" data-tab="overview-tab">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                        stroke="currentColor" style="width: 20px; height: 20px; margin-right: 8px;">
+                        <path stroke-linecap="round" stroke-linejoin="round"
+                            d="M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l-1-3m1 3l-1-3m-16.5 0h16.5" />
+                    </svg>
+                    Vista General
+                </button>
+                <button class="tab-button" data-tab="resources-tab">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                        stroke="currentColor" style="width: 20px; height: 20px; margin-right: 8px;">
+                        <path stroke-linecap="round" stroke-linejoin="round"
+                            d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
+                    </svg>
+                    Gestión de Capacidad
+                </button>
+                <button class="tab-button" data-tab="projects-tab">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                        stroke="currentColor" style="width: 20px; height: 20px; margin-right: 8px;">
+                        <path stroke-linecap="round" stroke-linejoin="round"
+                            d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                    </svg>
+                    Gestión de Proyectos
+                </button>
+            </div>
+
+            <!-- Vista General Tab -->
+            <div id="overview-tab" class="tab-content active">
+                <div class="section-header">
+                    <h2>Vista General - Dashboard de Capacidad</h2>
+                </div>
+
+                <div class="period-section">
+                    <div class="period-header">
+                        <select id="period-selector" class="period-selector">
+                            <option value="current">Mes actual</option>
+                            <option value="next3">3 meses</option>
+                            <option value="next6">6 meses</option>
+                            <option value="next12">12 meses</option>
+                        </select>
+                    </div>
+
+                    <!-- KPI Grid - 5 KPIs principales -->
+                    <div class="kpi-grid-overview">
+                        <div class="kpi-card">
+                            <div class="kpi-header">
+                                <span class="kpi-label">PROYECTOS ACTIVOS</span>
+                            </div>
+                            <div class="kpi-value" id="proyectos-activos">-</div>
+                            <div class="kpi-subtitle">total proyectos</div>
+                            <div class="kpi-details">
+                                <div style="display: flex; justify-content: space-between;">
+                                    <span>Número Evolutivos:</span>
+                                    <span style="font-weight: 600; color: #509594;" id="kpi-num-evolutivos">-</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between;">
+                                    <span>Número Proyectos:</span>
+                                    <span style="font-weight: 600; color: #509594;" id="kpi-num-proyectos">-</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="kpi-card">
+                            <div class="kpi-header">
+                                <span class="kpi-label">RECURSOS ACTIVOS</span>
+                            </div>
+                            <div class="kpi-value" id="recursos-activos">-</div>
+                            <div class="kpi-subtitle">total recursos</div>
+                            <div class="kpi-details">
+                                <div style="display: flex; justify-content: space-between;">
+                                    <span>Asignados >50%:</span>
+                                    <span style="font-weight: 600; color: #509594;" id="kpi-asignados-50">-</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between;">
+                                    <span>Asignados >80%:</span>
+                                    <span style="font-weight: 600; color: #509594;" id="kpi-asignados-80">-</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="kpi-card">
+                            <div class="kpi-header">
+                                <span class="kpi-label">HORAS COMPROMETIDAS</span>
+                            </div>
+                            <div class="kpi-value" id="kpi-horas-comprometidas">-</div>
+                            <div class="kpi-subtitle">horas totales</div>
+                            <div class="kpi-details">
+                                <div style="display: flex; justify-content: space-between;">
+                                    <span>Horas Evolutivos:</span>
+                                    <span style="font-weight: 600; color: #509594;" id="kpi-horas-evolutivos">-</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between;">
+                                    <span>Horas Proyectos:</span>
+                                    <span style="font-weight: 600; color: #509594;" id="kpi-horas-proyectos">-</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="kpi-card">
+                            <div class="kpi-header">
+                                <span class="kpi-label">CAPACIDAD DISPONIBLE</span>
+                            </div>
+                            <div class="kpi-value" id="capacidad-total">-</div>
+                            <div class="kpi-subtitle">horas disponibles</div>
+                            <div class="kpi-details">
+                                <div style="display: flex; justify-content: space-between;">
+                                    <span>Equivalencia FTEs:</span>
+                                    <span style="font-weight: 600; color: #509594;" id="kpi-ftes-capacidad">-</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="kpi-card">
+                            <div class="kpi-header">
+                                <span class="kpi-label">EFICIENCIA</span>
+                            </div>
+                            <div class="kpi-value" id="eficiencia">-</div>
+                            <div class="kpi-subtitle">utilización</div>
+                            <div class="kpi-details">
+                                <div style="display: flex; justify-content: space-between;">
+                                    <span>Equivalencia FTEs:</span>
+                                    <span style="font-weight: 600; color: #509594;" id="kpi-ftes-eficiencia">-</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Charts Grid - 3 gráficas requeridas -->
+                    <div class="charts-grid-overview">
+                        <div class="chart-card">
+                            <h2>Horas Comprometidas vs Disponibles</h2>
+                            <div class="chart-container" style="height: 300px;">
+                                <canvas id="overview-committed-hours-chart"></canvas>
+                            </div>
+                        </div>
+
+                        <div class="chart-card">
+                            <h2>Horas Comprometidas por Tipo de Proyecto</h2>
+                            <div class="chart-container" style="height: 300px;">
+                                <canvas id="overview-hours-by-type-chart"></canvas>
+                            </div>
+                        </div>
+
+                        <div class="chart-card">
+                            <h2>Split Horas Comprometidas</h2>
+                            <div class="chart-container" style="height: 300px;">
+                                <canvas id="overview-split-hours-chart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Desglose de proyectos por recurso (Tabla de Planificación) -->
+                <div class="section-header" style="margin-top: 2rem;">
+                    <h2>Desglose de Proyectos por Recurso</h2>
+                </div>
+
+                <div class="card">
+                    <h2>Planificación de Recursos por Proyecto y Mes</h2>
+                    <div class="capacity-matrix">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th class="project-name">Proyecto</th>
+                                    <th>Tipo</th>
+                                    <th>Dominio principal</th>
+                                    <th>Total Horas</th>
+                                    <th>Ene 2026</th>
+                                    <th>Feb 2026</th>
+                                    <th>Mar 2026</th>
+                                    <th>Abr 2026</th>
+                                    <th>May 2026</th>
+                                    <th>Jun 2026</th>
+                                    <th>Jul 2026</th>
+                                    <th>Ago 2026</th>
+                                    <th>Sep 2026</th>
+                                    <th>Oct 2026</th>
+                                    <th>Nov 2026</th>
+                                    <th>Dic 2026</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- Populated dynamically by JavaScript -->
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Drill Down Section -->
+                    <div id="drill-down-section" style="margin-top: 2rem; display: none;">
+                        <h3>Detalle por Tipología de Recursos</h3>
+                        <div id="drill-down-content">
+                            <!-- Content will be populated by JavaScript -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Esfuerzo Incurrido vs. Planificado -->
+                <div class="section-header" style="margin-top: 2rem;">
+                    <h2>Esfuerzo Incurrido vs. Planificado</h2>
+                </div>
+
+                <div class="card">
+                    <div style="overflow-x: auto;">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th style="text-align: left; min-width: 250px;">Proyecto</th>
+                                    <th style="text-align: center; min-width: 100px;">Tipo</th>
+                                    <th style="text-align: left; min-width: 180px;">Dominio Principal</th>
+                                    <th style="text-align: right; min-width: 120px;">Estimación Inicial (h)</th>
+                                    <th style="text-align: right; min-width: 120px;">Incurrido ITD (h)</th>
+                                    <th style="text-align: right; min-width: 120px;">ETC (h)</th>
+                                    <th style="text-align: right; min-width: 120px;">EAC (h)</th>
+                                    <th style="text-align: right; min-width: 140px;">Desviación (h)</th>
+                                    <th style="text-align: right; min-width: 120px;">Desviación (%)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="effort-tracking-table-body">
+                                <!-- Populated dynamically by JavaScript -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Insights and Recommendations (movida al final) -->
+                <div class="insights-recommendations-section" style="margin-top: 3rem;">
+                    <div class="insights-card">
+                        <div class="insights-header">
+                            <h2>Insights de Capacidad</h2>
+                            <div class="ai-badge">🧠 IA</div>
+                        </div>
+
+                        <div class="insight-item">
+                            <div class="insight-icon">📈</div>
+                            <div class="insight-content">
+                                <div class="insight-title">Tendencia Positiva</div>
+                                <div class="insight-text">La eficiencia del equipo ha mejorado 12% este trimestre.</div>
+                            </div>
+                        </div>
+
+                        <div class="insight-item">
+                            <div class="insight-icon">🔍</div>
+                            <div class="insight-content">
+                                <div class="insight-title">Cuello de Botella</div>
+                                <div class="insight-text">Los recursos de QA están al 95% de utilización.</div>
+                            </div>
+                        </div>
+
+                        <div class="insight-item">
+                            <div class="insight-icon">💡</div>
+                            <div class="insight-content">
+                                <div class="insight-title">Oportunidad</div>
+                                <div class="insight-text">3 recursos con skills de Análisis están subutilizados.</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="recommendations-card">
+                        <div class="recommendations-header">
+                            <h2>Recomendaciones Estratégicas</h2>
+                            <div class="score-badge">Score: 8.2/10</div>
+                        </div>
+
+                        <div class="recommendation-item high-priority">
+                            <span class="priority-badge alta">Alta</span>
+                            <div class="recommendation-content">
+                                <div class="recommendation-title">Contratar QA Specialist</div>
+                                <div class="recommendation-text">Incorporar 1 FTE de QA antes de Q3.</div>
+                                <div class="recommendation-impact">Impacto: +15% velocidad entrega</div>
+                            </div>
+                        </div>
+
+                        <div class="recommendation-item medium-priority">
+                            <span class="priority-badge media">Media</span>
+                            <div class="recommendation-content">
+                                <div class="recommendation-title">Cross-training en Análisis</div>
+                                <div class="recommendation-text">Formar 2 desarrolladores en skills de análisis.</div>
+                                <div class="recommendation-impact">Impacto: +20% flexibilidad</div>
+                            </div>
+                        </div>
+
+                        <div class="recommendation-item low-priority">
+                            <span class="priority-badge baja">Baja</span>
+                            <div class="recommendation-content">
+                                <div class="recommendation-title">Redistribuir Carga Q4</div>
+                                <div class="recommendation-text">Mover NC-19 a Q1 2026 para equilibrar carga.</div>
+                                <div class="recommendation-impact">Impacto: -12% riesgo sobrecarga</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Resources Tab -->
+            <div id="resources-tab" class="tab-content">
+                <div class="section-header">
+                    <h2>Gestión de Capacidad</h2>
+                </div>
+
+                <!-- Matriz de Recursos -->
+                <div class="card">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                        <h2 style="margin-bottom: 0;">Matriz de Recursos por Mes</h2>
+                        <button class="btn btn-primary" id="add-resource-btn">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                                stroke="currentColor" style="width: 20px; height: 20px;">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                            </svg>
+                            Añadir Recurso
+                        </button>
+                    </div>
+                    <div class="capacity-matrix">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th style="width: 40px; min-width: 40px;"></th>
+                                    <th class="project-name" style="min-width: 150px;">Recurso</th>
+                                    <th style="min-width: 100px; text-align: center;">Ratio de Ocupación</th>
+                                    <th style="min-width: 120px; text-align: center;">Skills</th>
+                                    <th style="min-width: 80px;">ENE 2026</th>
+                                    <th style="min-width: 80px;">FEB 2026</th>
+                                    <th style="min-width: 80px;">MAR 2026</th>
+                                    <th style="min-width: 80px;">ABR 2026</th>
+                                    <th style="min-width: 80px;">MAY 2026</th>
+                                    <th style="min-width: 80px;">JUN 2026</th>
+                                    <th style="min-width: 80px;">JUL 2026</th>
+                                    <th style="min-width: 80px;">AGO 2026</th>
+                                    <th style="min-width: 80px;">SEP 2026</th>
+                                    <th style="min-width: 80px;">OCT 2026</th>
+                                    <th style="min-width: 80px;">NOV 2026</th>
+                                    <th style="min-width: 80px;">DIC 2026</th>
+                                </tr>
+                            </thead>
+                            <tbody id="capacity-table-body">
+                                <!-- Populated dynamically by resourceCapacity.js -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Projects Tab -->
+            <div id="projects-tab" class="tab-content">
+                <div class="section-header">
+                    <h2>Gestión de Proyectos</h2>
+                </div>
+
+                <!-- Charts Grid -->
+                <div
+                    style="display: grid; grid-template-columns: 250px repeat(3, minmax(0, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
+                    <div class="card">
+                        <h3 class="kpi-label">Proyectos Registrados</h3>
+                        <div style="font-size: 2.5rem; font-weight: 600; color: #319795; margin: 1rem 0;"
+                            id="projects-total-count">-</div>
+                        <div style="color: #718096; margin-bottom: 0.75rem;">Total proyectos</div>
+                        <div
+                            style="display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.85rem; color: #4a5568;">
+                            <div style="display: flex; justify-content: space-between;">
+                                <span>Evolutivos:</span>
+                                <span style="font-weight: 600; color: #319795;" id="projects-evolutivos-count">-</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between;">
+                                <span>Proyectos:</span>
+                                <span style="font-weight: 600; color: #319795;" id="projects-proyectos-count">-</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <h2 style="margin-bottom: 0;">Por Estado</h2>
+                        <div class="chart-container" style="height: 200px;">
+                            <canvas id="projects-by-status-chart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <h2 style="margin-bottom: 0;">Por Dominio Principal</h2>
+                        <div class="chart-container" style="height: 200px;">
+                            <canvas id="projects-by-domain-chart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <h2 style="margin-bottom: 0;">Por Prioridad</h2>
+                        <div class="chart-container" style="height: 200px;">
+                            <canvas id="projects-by-priority-chart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                        <h2 style="margin-bottom: 0;">Proyectos Planificados</h2>
+                        <div style="display: flex; gap: 1rem;">
+                            <button class="btn btn-primary" id="add-project-btn" title="Añadir Proyecto">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                    stroke-width="1.5" stroke="currentColor" style="width: 20px; height: 20px;">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                                </svg>
+                                Añadir Proyecto
+                            </button>
+                            <button class="btn btn-primary" id="import-jira-btn" title="Importar desde Jira">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"
+                                    style="width: 20px; height: 20px;">
+                                    <path
+                                        d="M11.53 2c0 2.4 1.97 4.35 4.35 4.35h1.78v1.7c0 2.4 1.97 4.35 4.35 4.35V2.84a.84.84 0 0 0-.84-.84H11.53zM6.77 6.8c0 2.4 1.97 4.35 4.35 4.35h1.78v1.7c0 2.4 1.97 4.35 4.35 4.35V7.64a.84.84 0 0 0-.84-.84H6.77zM2 11.6c0 2.4 1.97 4.35 4.35 4.35h1.78v1.7c0 2.4 1.97 4.35 4.35 4.35v-9.56a.84.84 0 0 0-.84-.84H2z" />
+                                </svg>
+                                Importar desde Jira
+                            </button>
+                        </div>
+                    </div>
+                    <div style="margin-bottom: 1rem;">
+                        <input type="text" id="project-search" class="form-control" placeholder="Buscar proyectos..."
+                            style="max-width: 300px; padding: 0.5rem; border: 1px solid #e2e8f0; border-radius: 0.375rem;">
+                    </div>
+                    <div style="overflow-x: auto;">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Título</th>
+                                    <th>Descripción</th>
+                                    <th>Dominio Principal</th>
+                                    <th>Horas Estimadas</th>
+                                    <th>Fecha Inicio</th>
+                                    <th>Fecha Fin</th>
+                                    <th>Estado</th>
+                                    <th>Tipo</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="projects-table-body">
+                                <!-- Populated dynamically by JavaScript -->
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Pagination Container -->
+                    <div id="pagination-container" class="pagination-container"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Authentication Check Script -->
+    <script type="module">
+        import authService from '../js/services/auth.js';
+
+        // Check authentication and initialize UI
+        authService.checkAndInitialize();
+
+        // Make functions globally available for onclick handlers
+        window.toggleUserDropdown = function() {
+            const dropdown = document.getElementById('user-dropdown');
+            if (dropdown) {
+                const isVisible = dropdown.style.display === 'block';
+                dropdown.style.display = isVisible ? 'none' : 'block';
+            }
+        };
+
+        window.logout = function() {
+            authService.logout();
+        };
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', function (event) {
+            const dropdown = document.getElementById('user-dropdown');
+            const initialBtn = document.getElementById('user-initial-btn');
+
+            if (dropdown && initialBtn) {
+                if (!initialBtn.contains(event.target) && !dropdown.contains(event.target)) {
+                    dropdown.style.display = 'none';
+                }
+            }
+        });
+    </script>
+
+    <!-- Project Modal -->
+    <div id="projectModal" class="modal-overlay">
+        <div class="modal-container">
+            <div class="modal-header">
+                <h2 id="modalTitle">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                        stroke="currentColor"
+                        style="width: 24px; height: 24px; display: inline-block; margin-right: 8px; vertical-align: middle;">
+                        <path stroke-linecap="round" stroke-linejoin="round"
+                            d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                    </svg>
+                    Añadir Proyecto
+                </h2>
+                <button class="modal-close" onclick="closeProjectModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="projectForm">
+                    <input type="hidden" id="projectId" name="id">
+
+                    <div class="form-row" style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 1rem;">
+                        <div class="form-group" style="margin: 0;">
+                            <label for="projectCode">ID Proyecto <span class="required">*</span></label>
+                            <input type="text" id="projectCode" name="code" class="form-control"
+                                placeholder="Ej: NC-249" required>
+                            <small class="form-help">Formato sugerido: NC-XXX (ej: NC-249)</small>
+                            <div class="form-error" id="projectCodeError"></div>
+                        </div>
+
+                        <div class="form-group" style="margin: 0;">
+                            <label for="projectType">Tipo</label>
+                            <select id="projectType" name="type" class="form-control">
+                                <option value="">-- Seleccionar --</option>
+                                <option value="Proyecto">Proyecto</option>
+                                <option value="Evolutivo">Evolutivo</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group" style="margin: 0;">
+                            <label for="projectStatus">Estado <span class="required">*</span></label>
+                            <select id="projectStatus" name="status" class="form-control" required>
+                                <option value="">-- Seleccionar Estado --</option>
+                                <option value="1">Idea</option>
+                                <option value="2">Concepto</option>
+                                <option value="3">Viabilidad (TEC-ECO)</option>
+                                <option value="4">Diseño Detallado</option>
+                                <option value="5">Desarrollo</option>
+                                <option value="6">Implantado</option>
+                                <option value="7">Finalizado</option>
+                                <option value="8">On Hold</option>
+                                <option value="9">Cancelado</option>
+                            </select>
+                            <div class="form-error" id="projectStatusError"></div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="projectTitle">Título <span class="required">*</span></label>
+                        <input type="text" id="projectTitle" name="title" class="form-control"
+                            placeholder="Título del proyecto" required>
+                        <small class="form-help">Mínimo 5 caracteres</small>
+                        <div class="form-error" id="projectTitleError"></div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="projectDescription">Descripción <span class="required">*</span></label>
+                        <textarea id="projectDescription" name="description" class="form-control" rows="3"
+                            placeholder="Descripción detallada del proyecto" required></textarea>
+                        <small class="form-help">Mínimo 10 caracteres</small>
+                        <div class="form-error" id="projectDescriptionError"></div>
+                    </div>
+
+                    <div class="form-row" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem;">
+                        <div class="form-group" style="margin: 0;">
+                            <label for="projectDomain">Dominio Principal <span class="required">*</span></label>
+                            <select id="projectDomain" name="domain" class="form-control" required>
+                                <option value="">-- Seleccionar Dominio --</option>
+                                <option value="1">Atención</option>
+                                <option value="2">Datos</option>
+                                <option value="3">Facturación y Cobros</option>
+                                <option value="4">Ciclo de Vida y Producto</option>
+                                <option value="5">Operación de Sistemas y Ciberseguridad</option>
+                                <option value="6">Ventas | Contratación y SW</option>
+                                <option value="7">Portabilidad</option>
+                                <option value="8">Integración</option>
+                                <option value="9">Industrial</option>
+                                <option value="10">Gen. Distribuida</option>
+                                <option value="11">IA Gen</option>
+                                <option value="12">Ninguno</option>
+                            </select>
+                            <div class="form-error" id="projectDomainError"></div>
+                        </div>
+
+                        <div class="form-group" style="margin: 0;">
+                            <label for="projectPriority">Prioridad <span class="required">*</span></label>
+                            <select id="projectPriority" name="priority" class="form-control" required>
+                                <option value="">-- Seleccionar Prioridad --</option>
+                                <option value="Muy Alta">Muy Alta</option>
+                                <option value="Alta">Alta</option>
+                                <option value="Media">Media</option>
+                                <option value="Baja">Baja</option>
+                                <option value="Muy Baja">Muy Baja</option>
+                            </select>
+                            <div class="form-error" id="projectPriorityError"></div>
+                        </div>
+
+                        <div class="form-group" style="margin: 0;">
+                            <label for="projectStartDate">Fecha Inicio</label>
+                            <input type="date" id="projectStartDate" name="startDate" class="form-control">
+                            <div class="form-error" id="projectStartDateError"></div>
+                        </div>
+
+                        <div class="form-group" style="margin: 0;">
+                            <label for="projectEndDate">Fecha Fin</label>
+                            <input type="date" id="projectEndDate" name="endDate" class="form-control">
+                            <div class="form-error" id="projectEndDateError"></div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center;">
+                <div style="display: flex; gap: 0.75rem;">
+                    <button type="button" class="btn btn-secondary" onclick="closeProjectModal()">Cancelar</button>
+                </div>
+                <div style="display: flex; gap: 0.75rem;">
+                    <button type="button" class="btn btn-success" onclick="saveProject()"
+                        style="background: #2d7a6e; border-color: #2d7a6e; color: white;">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                            stroke="white" style="width: 18px; height: 18px;">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                        </svg>
+                        Guardar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div id="deleteModal" class="modal-overlay">
+        <div class="modal-container modal-small">
+            <div class="modal-header">
+                <h2 style="display: flex; align-items: center; gap: 0.5rem;">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                        stroke="currentColor" style="width: 24px; height: 24px;">
+                        <path stroke-linecap="round" stroke-linejoin="round"
+                            d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                    </svg>
+                    Confirmar Eliminación
+                </h2>
+                <button class="modal-close" onclick="closeDeleteModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p style="margin: 0 0 1rem 0; font-size: 1rem; color: var(--text-primary);">
+                    Se va a eliminar el proyecto <strong id="deleteProjectName"></strong>
+                </p>
+                <div
+                    style="display: flex; align-items: flex-start; gap: 0.75rem; padding: 1rem; background: #FAE5E4; border-left: 4px solid #f59e0b; border-radius: var(--radius-md);">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                        stroke="currentColor"
+                        style="width: 20px; height: 20px; flex-shrink: 0; color: #f59e0b; margin-top: 0.1rem;">
+                        <path stroke-linecap="round" stroke-linejoin="round"
+                            d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                    </svg>
+                    <div style="font-size: 0.9rem; color: #92400e; line-height: 1.5;">
+                        <strong>Advertencia:</strong> Esta acción desencadena la eliminación de todos los datos
+                        asociados al proyecto.
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeDeleteModal()">Cancelar</button>
+                <button type="button" class="btn btn-danger" onclick="confirmDelete()">Eliminar Proyecto</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Resource Modal -->
+    <div id="resourceModal" class="modal-overlay">
+        <div class="modal-container">
+            <div class="modal-header">
+                <h2 id="resourceModalTitle">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24"
+                        style="width: 24px; height: 24px; display: inline-block; margin-right: 8px; vertical-align: middle;">
+                        <path
+                            d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+                    </svg>
+                    Añadir Recurso
+                </h2>
+                <button class="modal-close" onclick="closeResourceModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="resourceForm">
+                    <input type="hidden" id="resourceId" name="id">
+
+                    <!-- Hidden field for team (auto-assigned from logged user) -->
+                    <input type="hidden" id="resourceTeam" name="team">
+
+                    <div class="form-group">
+                        <label for="resourceName">Nombre Completo <span class="required">*</span></label>
+                        <input type="text" id="resourceName" name="name" class="form-control"
+                            placeholder="Nombre del recurso" required>
+                        <small class="form-help">Mínimo 3 caracteres</small>
+                        <div class="form-error" id="resourceNameError"></div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="resourceEmail">Email</label>
+                        <input type="email" id="resourceEmail" name="email" class="form-control"
+                            placeholder="email@ejemplo.com">
+                        <small class="form-help">Email del recurso (opcional)</small>
+                        <div class="form-error" id="resourceEmailError"></div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="resourceDefaultCapacity">Capacidad por Defecto (horas/mes) (máx.180) <span
+                                class="required">*</span></label>
+                        <input type="number" id="resourceDefaultCapacity" name="defaultCapacity" class="form-control"
+                            placeholder="160" value="160" min="1" max="180" required>
+                        <small class="form-help">Horas disponibles por mes (máximo: 180 horas)</small>
+                        <div class="form-error" id="resourceDefaultCapacityError"></div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Skills / Perfiles</label>
+                        <div id="resourceSkillsContainer"
+                            style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; margin-top: 0.5rem;">
+                            <!-- Skills checkboxes will be populated by JavaScript -->
+                        </div>
+                        <small class="form-help">Selecciona los skills del recurso</small>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeResourceModal()">Cancelar</button>
+                <button type="button" class="btn btn-primary" onclick="saveResource()">Guardar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Resource Confirmation Modal -->
+    <div id="deleteResourceModal" class="modal-overlay">
+        <div class="modal-container delete-modal">
+            <div class="modal-header">
+                <h2>Confirmar Eliminación</h2>
+                <button class="modal-close" onclick="closeDeleteResourceModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p class="delete-modal-message">¿Está seguro de que desea marcar como inactivo el recurso?</p>
+                <span class="delete-modal-project-name" id="deleteResourceName"></span>
+                <div class="delete-modal-warning">
+                    <span class="delete-modal-warning-icon">⚠️</span>
+                    <div class="delete-modal-warning-text">
+                        <strong>Advertencia:</strong> El recurso será marcado como inactivo y no aparecerá en las vistas
+                        de capacidad.
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeDeleteResourceModal()">Cancelar</button>
+                <button type="button" class="btn btn-danger" onclick="confirmDeleteResource()">Marcar como
+                    Inactivo</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Task Details Modal with AG Grid -->
+    <div id="taskDetailsModal" class="modal-overlay" style="display: none;">
+        <div class="modal-container" style="max-width: 95vw; width: 95vw; max-height: 90vh;">
+            <div class="modal-header"
+                style="background: linear-gradient(135deg, #319795 0%, #2c7a7b 100%); color: white; display: flex; align-items: center; gap: 0.75rem;">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                    stroke="currentColor" style="width: 24px; height: 24px;">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                        d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z" />
+                </svg>
+                <h2 id="taskModalTitle" style="flex: 1; margin: 0; font-size: 1.1rem;">Detalle de Tareas</h2>
+                <button class="modal-close" onclick="closeTaskDetailsModal()"
+                    style="background: rgba(255,255,255,0.2); border: none; color: white; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 1.5rem; line-height: 1; display: flex; align-items: center; justify-content: center;">&times;</button>
+            </div>
+            <div class="modal-body"
+                style="padding: 1rem; overflow: hidden; display: flex; flex-direction: column; max-height: calc(90vh - 180px);">
+                <!-- AG Grid Container -->
+                <div id="taskGrid" class="ag-theme-alpine" style="width: 100%; flex: 1; min-height: 400px;"></div>
+            </div>
+            <div class="modal-footer"
+                style="display: flex; justify-content: space-between; align-items: center; padding: 1rem; border-top: 1px solid #e2e8f0;">
+                <div style="display: flex; gap: 0.75rem;">
+                    <button type="button" class="btn btn-secondary" onclick="closeTaskDetailsModal()">Cerrar</button>
+                </div>
+                <div style="display: flex; gap: 0.75rem;">
+                    <button class="btn btn-success" onclick="addTaskRow()"
+                        style="display: flex; align-items: center; gap: 0.5rem;">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                            stroke="currentColor" style="width: 18px; height: 18px;">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                        </svg>
+                        Añadir Fila
+                    </button>
+                    <button class="btn btn-danger" onclick="deleteSelectedTasks()"
+                        style="display: flex; align-items: center; gap: 0.5rem;">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                            stroke="currentColor" style="width: 18px; height: 18px;">
+                            <path stroke-linecap="round" stroke-linejoin="round"
+                                d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                        </svg>
+                        Eliminar Seleccionadas
+                    </button>
+                    <button type="button" class="btn btn-primary" onclick="saveTaskChanges()"
+                        style="background: linear-gradient(135deg, #48bb78 0%, #38a169 100%); border: none;">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                            stroke="currentColor"
+                            style="width: 18px; height: 18px; display: inline-block; margin-right: 0.5rem;">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                        </svg>
+                        Guardar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- Modular JavaScript (ES6 Modules) -->
+    <script type="module" src="../js/main.js"></script>
+</body>
+
+</html>

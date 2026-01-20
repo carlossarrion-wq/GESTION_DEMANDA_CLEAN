@@ -1,0 +1,633 @@
+/**
+ * Jira Integration Modal
+ * Handles configuration and import from Jira
+ * Configuration is managed in the backend per team
+ */
+
+import { API_CONFIG } from '../config/data.js';
+
+export class JiraModal {
+    constructor() {
+        this.modal = null;
+        this.selectedProjects = [];
+    }
+
+    init() {
+        this.createModal();
+        console.log('Jira Modal initialized');
+    }
+
+    createModal() {
+        const modalHTML = `
+            <div id="jira-modal" class="modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 9999;">
+                <div class="modal-container" style="max-width: 1225px; width: 87.5%; max-height: 98vh; overflow-y: auto; background: white; border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); font-size: 2rem;">
+                    <div class="modal-header">
+                        <h2><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 24px; height: 24px; display: inline-block; vertical-align: middle; margin-right: 8px;">
+  <path d="M11.53 2c0 2.4 1.97 4.35 4.35 4.35h1.78v1.7c0 2.4 1.97 4.35 4.35 4.35V2.84a.84.84 0 0 0-.84-.84H11.53zM6.77 6.8c0 2.4 1.97 4.35 4.35 4.35h1.78v1.7c0 2.4 1.97 4.35 4.35 4.35V7.64a.84.84 0 0 0-.84-.84H6.77zM2 11.6c0 2.4 1.97 4.35 4.35 4.35h1.78v1.7c0 2.4 1.97 4.35 4.35 4.35v-9.56a.84.84 0 0 0-.84-.84H2z"/>
+</svg> Importar desde Jira</h2>
+                        <button class="modal-close" onclick="window.jiraModal.close()">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <div id="jira-step-1" class="jira-step">
+                            <h3 style="margin-top: 0; color: #2563eb;">Configuración</h3>
+                            
+                            <div class="form-group">
+                                <label style="font-size: 1.1rem; font-weight: 600;">URL de Jira *</label>
+                                <input type="text" id="jira-url" class="form-input" 
+                                       value="https://naturgy-adn.atlassian.net" readonly
+                                       style="background-color: #f3f4f6; font-size: 1.1rem;">
+                            </div>
+
+                            <div class="form-group">
+                                <label style="font-size: 1.1rem; font-weight: 600;">Email *</label>
+                                <input type="email" id="jira-email" class="form-input" 
+                                       placeholder="tu.email@naturgy.com"
+                                       style="font-size: 1.1rem;">
+                            </div>
+
+                            <div class="form-group">
+                                <label style="font-size: 1.1rem; font-weight: 600;">API Token *</label>
+                                <input type="password" id="jira-token" class="form-input" 
+                                       placeholder="Tu API Token de Jira"
+                                       style="font-size: 1.1rem;">
+                                <small style="color: #6b7280; font-size: 1rem;">
+                                    <a href="https://id.atlassian.com/manage-profile/security/api-tokens" target="_blank" style="color: #2563eb; font-size: 1rem;">
+                                        Genera tu token aquí
+                                    </a>
+                                </small>
+                            </div>
+
+                            <div class="form-group">
+                                <label style="font-size: 1.1rem; font-weight: 600;">Consulta JQL (Opcional)</label>
+                                <textarea id="jira-jql" class="form-input" rows="3" 
+                                          placeholder="project = 'TU_PROYECTO' AND status != 'Closed'"
+                                          style="font-size: 1.1rem;"></textarea>
+                                <small style="color: #6b7280; font-size: 1rem;">Ejemplo: project = 'NC' AND status != 'Closed'</small>
+                            </div>
+
+                            <div style="margin-top: 1.5rem; padding: 1rem; background-color: #dbeafe; border-left: 4px solid #2563eb; border-radius: 4px;">
+                                <p style="margin: 0; font-size: 1.1rem; color: #1e40af;">
+                                    <strong>🔐 Seguridad:</strong> Tu API Token no se guarda y solo se usa para esta importación.
+                                </p>
+                            </div>
+
+                            <div class="modal-footer" style="margin-top: 1.5rem;">
+                                <button onclick="window.jiraModal.close()" class="btn btn-secondary">
+                                    Cancelar
+                                </button>
+                                <button onclick="window.jiraModal.importProjects()" class="btn btn-primary">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width: 20px; height: 20px;">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                                    </svg>
+                                    Importar
+                                </button>
+                            </div>
+                        </div>
+
+                        <div id="jira-selection" class="jira-step" style="display: none;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; padding: 0.75rem; background-color: #f3f4f6; border-radius: 6px;">
+                                <span id="jira-selection-count" style="font-weight: 600; color: #374151; font-size: 1rem;">0 de 0 seleccionados</span>
+                                <div>
+                                    <button onclick="window.jiraModal.deselectAllIssues()" class="btn btn-secondary" style="padding: 0.625rem 1.25rem; font-size: 1rem;">
+                                        Deseleccionar Todos
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div id="jira-issues-list" style="max-height: 300px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 6px; padding: 1rem; background-color: #fafafa;">
+                                <!-- Issues will be populated here -->
+                            </div>
+
+                            <div class="modal-footer" style="margin-top: 1.5rem;">
+                                <button onclick="window.jiraModal.close()" class="btn btn-secondary">
+                                    Cancelar
+                                </button>
+                                <button id="jira-import-selected-btn" onclick="window.jiraModal.importSelectedIssues()" class="btn btn-primary" disabled>
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width: 20px; height: 20px;">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                                    </svg>
+                                    Importar Seleccionados
+                                </button>
+                            </div>
+                        </div>
+
+                        <div id="jira-importing" class="jira-step" style="display: none;">
+                            <div style="text-align: center; padding: 2rem;">
+                                <div class="spinner"></div>
+                                <p id="jira-import-status" style="margin-top: 1rem; color: #6b7280; font-size: 1.1rem;">
+                                    Importando proyectos desde Jira...
+                                </p>
+                            </div>
+                        </div>
+
+                        <div id="jira-success" class="jira-step" style="display: none;">
+                            <h3 style="margin-top: 0; color: #10b981;">✓ Importación Completada</h3>
+                            <div id="jira-results" style="padding: 1rem; background-color: #f0fdf4; border-radius: 4px; margin-top: 1rem;">
+                                <!-- Results will be shown here -->
+                            </div>
+                            <div class="modal-footer" style="margin-top: 1.5rem;">
+                                <button onclick="window.jiraModal.close(); window.location.reload();" class="btn btn-primary">
+                                    Cerrar y Recargar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.body.insertAdjacentHTML('beforeend', modalHTML);
+        this.modal = document.getElementById('jira-modal');
+    }
+
+    open() {
+        console.log('JiraModal.open() called - usando configuración automática');
+        if (this.modal) {
+            console.log('Modal element found, showing...');
+            this.modal.style.display = 'flex';
+            this.modal.style.alignItems = 'center';
+            this.modal.style.justifyContent = 'center';
+            this.modal.style.opacity = '1';
+            this.modal.style.visibility = 'visible';
+            
+            // También asegurar que el container sea visible
+            const container = this.modal.querySelector('.modal-container');
+            if (container) {
+                container.style.visibility = 'visible';
+                container.style.opacity = '1';
+            }
+            
+            // Saltar directamente a la importación usando credenciales del archivo de configuración
+            console.log('Usando credenciales de jiraConfig.js');
+            this.importProjectsDirectly();
+        } else {
+            console.error('Modal element not found!');
+        }
+    }
+
+    close() {
+        if (this.modal) {
+            this.modal.style.display = 'none';
+        }
+    }
+
+    showStep(step) {
+        document.querySelectorAll('.jira-step').forEach(el => el.style.display = 'none');
+        
+        if (step === 1) {
+            document.getElementById('jira-step-1').style.display = 'block';
+        } else if (step === 'importing') {
+            document.getElementById('jira-importing').style.display = 'block';
+        } else if (step === 'success') {
+            document.getElementById('jira-success').style.display = 'block';
+        }
+    }
+
+    /**
+     * Importar proyectos directamente usando configuración del backend
+     */
+    async importProjectsDirectly() {
+        const userTeam = sessionStorage.getItem('user_team');
+        const awsAccessKey = sessionStorage.getItem('aws_access_key');
+        
+        if (!userTeam || !awsAccessKey) {
+            alert('No se pudo obtener la información del usuario. Por favor inicia sesión de nuevo.');
+            this.close();
+            return;
+        }
+
+        this.showStep('importing');
+        document.getElementById('jira-import-status').textContent = 'Descargando issues desde Jira...';
+
+        try {
+            // El backend usa la configuración del equipo automáticamente
+            const listUrl = `${API_CONFIG.BASE_URL}/jira/issues`;
+            
+            console.log(`Listando issues desde Jira para el equipo: ${userTeam}`);
+
+            const response = await fetch(listUrl, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                    'Authorization': awsAccessKey,
+                    'x-user-team': userTeam
+                }
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                throw new Error(result.error?.message || result.error || 'Error consultando Jira');
+            }
+
+            console.log('Respuesta de Jira:', result);
+
+            // Manejar nueva estructura: {success: true, data: {issues: [...], total: X}}
+            let issues;
+            if (result.success && result.data) {
+                issues = result.data.issues;
+            } else if (Array.isArray(result)) {
+                issues = result;
+            } else {
+                issues = result.issues;
+            }
+
+            // Mostrar modal de selección
+            this.showIssueSelection(issues);
+        } catch (error) {
+            console.error('Error:', error);
+            alert(`Error al consultar Jira: ${error.message}`);
+            this.close();
+        }
+    }
+
+    async importProjects() {
+        const email = document.getElementById('jira-email').value.trim();
+        const apiToken = document.getElementById('jira-token').value.trim();
+        const jqlQuery = document.getElementById('jira-jql').value.trim() || "project = 'NC' AND status != 'Closed'";
+
+        if (!email) {
+            alert('Por favor ingresa tu email de Jira');
+            return;
+        }
+
+        if (!apiToken) {
+            alert('Por favor ingresa tu API Token de Jira');
+            return;
+        }
+
+        // Guardar credenciales para usar después
+        this.tempCredentials = {
+            email,
+            apiToken,
+            jqlQuery
+        };
+
+        this.showStep('importing');
+        document.getElementById('jira-import-status').textContent = 'Descargando issues desde Jira...';
+
+        try {
+            // Paso 1: Listar issues disponibles
+            const listUrl = `${API_CONFIG.BASE_URL}/jira/issues?jiraUrl=${encodeURIComponent(this.jiraConfig.url)}&email=${encodeURIComponent(email)}&apiToken=${encodeURIComponent(apiToken)}&jqlQuery=${encodeURIComponent(jqlQuery)}`;
+            
+            console.log('Listando issues desde Jira...');
+
+            const response = await fetch(listUrl, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json'
+                }
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                throw new Error(result.error?.message || result.error || 'Error consultando Jira');
+            }
+
+            console.log('Respuesta de Jira:', result);
+
+            // Manejar nueva estructura: {success: true, data: {issues: [...], total: X}}
+            let issues;
+            if (result.success && result.data) {
+                issues = result.data.issues;
+            } else if (Array.isArray(result)) {
+                issues = result;
+            } else {
+                issues = result.issues;
+            }
+
+            // Mostrar modal de selección
+            this.showIssueSelection(issues);
+        } catch (error) {
+            console.error('Error:', error);
+            alert(`Error al consultar Jira: ${error.message}`);
+            this.showStep(1);
+        }
+    }
+
+    showIssueSelection(issues) {
+        if (!issues || issues.length === 0) {
+            alert('No se encontraron issues con el JQL proporcionado');
+            this.showStep(1);
+            return;
+        }
+
+        // Guardar issues originales para filtrado
+        this.allIssues = issues;
+
+        // Mostrar paso de selección
+        document.getElementById('jira-importing').style.display = 'none';
+        document.getElementById('jira-selection').style.display = 'block';
+
+        // Añadir controles de búsqueda y filtros antes de la lista
+        const selectionDiv = document.getElementById('jira-selection');
+        const existingFilters = selectionDiv.querySelector('.jira-filters');
+        
+        if (!existingFilters) {
+            const filtersHTML = `
+                <div class="jira-filters" style="background-color: #f9fafb; padding: 1rem; border-radius: 6px; margin-bottom: 1rem; border: 1px solid #e5e7eb;">
+                    <div style="margin-bottom: 0.75rem;">
+                        <label style="display: flex; align-items: center; font-size: 1rem; font-weight: 600; color: #374151; margin-bottom: 0.5rem;">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width: 16px; height: 16px; margin-right: 0.5rem;">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                            </svg>
+                            Buscar por Título o ID
+                        </label>
+                        <input type="text" id="jira-search-input" class="form-input" 
+                               placeholder="Buscar en título o key..." 
+                               style="width: 100%; padding: 0.625rem; border: 1px solid #d1d5db; border-radius: 4px; font-size: 1rem;">
+                    </div>
+                    
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem;">
+                        <div>
+                            <label style="display: flex; align-items: center; font-size: 1rem; font-weight: 600; color: #374151; margin-bottom: 0.5rem;">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width: 16px; height: 16px; margin-right: 0.5rem;">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" />
+                                </svg>
+                                Dominio
+                            </label>
+                            <select id="jira-filter-domain" class="form-input" style="width: 100%; padding: 0.625rem; border: 1px solid #d1d5db; border-radius: 4px; font-size: 1rem;">
+                                <option value="">Todos</option>
+                            </select>
+                        </div>
+                        
+                        <div>
+                            <label style="display: flex; align-items: center; font-size: 1rem; font-weight: 600; color: #374151; margin-bottom: 0.5rem;">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width: 16px; height: 16px; margin-right: 0.5rem;">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+                                </svg>
+                                Estado
+                            </label>
+                            <select id="jira-filter-status" class="form-input" style="width: 100%; padding: 0.625rem; border: 1px solid #d1d5db; border-radius: 4px; font-size: 1rem;">
+                                <option value="">Todos</option>
+                            </select>
+                        </div>
+                        
+                        <div>
+                            <label style="display: flex; align-items: center; font-size: 1rem; font-weight: 600; color: #374151; margin-bottom: 0.5rem;">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width: 16px; height: 16px; margin-right: 0.5rem;">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z" />
+                                </svg>
+                                Tipo
+                            </label>
+                            <select id="jira-filter-type" class="form-input" style="width: 100%; padding: 0.625rem; border: 1px solid #d1d5db; border-radius: 4px; font-size: 1rem;">
+                                <option value="">Todos</option>
+                                <option value="Si">Proyecto</option>
+                                <option value="No">Evolutivo</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div style="margin-top: 0.75rem; text-align: right;">
+                        <button id="jira-clear-filters" class="btn btn-secondary" style="padding: 0.625rem 1.25rem; font-size: 1rem;">
+                            Limpiar Filtros
+                        </button>
+                    </div>
+                </div>
+            `;
+            
+            // Insertar antes del contador
+            const countDiv = selectionDiv.querySelector('[style*="flex"]');
+            countDiv.insertAdjacentHTML('beforebegin', filtersHTML);
+            
+            // Poblar opciones de filtros
+            this.populateFilterOptions(issues);
+            
+            // Añadir event listeners
+            document.getElementById('jira-search-input').addEventListener('input', () => this.applyFilters());
+            document.getElementById('jira-filter-domain').addEventListener('change', () => this.applyFilters());
+            document.getElementById('jira-filter-status').addEventListener('change', () => this.applyFilters());
+            document.getElementById('jira-filter-type').addEventListener('change', () => this.applyFilters());
+            document.getElementById('jira-clear-filters').addEventListener('click', () => this.clearFilters());
+        }
+
+        // Renderizar issues
+        this.renderIssues(issues);
+    }
+
+    populateFilterOptions(issues) {
+        // Obtener valores únicos
+        const domains = [...new Set(issues.map(i => i.dominioPrincipal || 'Sin dominio'))].sort();
+        const statuses = [...new Set(issues.map(i => i.status))].sort();
+        
+        // Poblar select de dominios
+        const domainSelect = document.getElementById('jira-filter-domain');
+        domains.forEach(domain => {
+            const option = document.createElement('option');
+            option.value = domain;
+            option.textContent = domain;
+            domainSelect.appendChild(option);
+        });
+        
+        // Poblar select de estados
+        const statusSelect = document.getElementById('jira-filter-status');
+        statuses.forEach(status => {
+            const option = document.createElement('option');
+            option.value = status;
+            option.textContent = status;
+            statusSelect.appendChild(option);
+        });
+    }
+
+    applyFilters() {
+        const searchText = document.getElementById('jira-search-input').value.toLowerCase();
+        const filterDomain = document.getElementById('jira-filter-domain').value;
+        const filterStatus = document.getElementById('jira-filter-status').value;
+        const filterType = document.getElementById('jira-filter-type').value;
+        
+        const filtered = this.allIssues.filter(issue => {
+            // Filtro de búsqueda
+            const matchesSearch = !searchText || 
+                issue.key.toLowerCase().includes(searchText) || 
+                issue.summary.toLowerCase().includes(searchText);
+            
+            // Filtro de dominio
+            const matchesDomain = !filterDomain || 
+                (issue.dominioPrincipal || 'Sin dominio') === filterDomain;
+            
+            // Filtro de estado
+            const matchesStatus = !filterStatus || issue.status === filterStatus;
+            
+            // Filtro de tipo
+            const matchesType = !filterType || issue.esProyecto === filterType;
+            
+            return matchesSearch && matchesDomain && matchesStatus && matchesType;
+        });
+        
+        this.renderIssues(filtered);
+        
+        // Actualizar mensaje si no hay resultados
+        if (filtered.length === 0) {
+            const container = document.getElementById('jira-issues-list');
+            container.innerHTML = '<p style="text-align: center; color: #6b7280; padding: 2rem;">No se encontraron issues con los filtros aplicados</p>';
+        }
+    }
+
+    clearFilters() {
+        document.getElementById('jira-search-input').value = '';
+        document.getElementById('jira-filter-domain').value = '';
+        document.getElementById('jira-filter-status').value = '';
+        document.getElementById('jira-filter-type').value = '';
+        this.applyFilters();
+    }
+
+    renderIssues(issues) {
+        const issuesContainer = document.getElementById('jira-issues-list');
+        issuesContainer.innerHTML = '';
+
+        // Crear lista de issues con checkboxes
+        issues.forEach(issue => {
+            const issueDiv = document.createElement('div');
+            issueDiv.className = 'jira-issue-item';
+            issueDiv.style.cssText = 'padding: 6px 12px; border: 1px solid #e5e7eb; border-radius: 6px; margin-bottom: 4px; cursor: pointer; transition: background 0.2s;';
+            issueDiv.setAttribute('data-issue-key', issue.key);
+            
+            // Determinar etiqueta de tipo de proyecto
+            let tipoProyecto = 'No definido';
+            if (issue.esProyecto === 'Si') {
+                tipoProyecto = 'Proyecto';
+            } else if (issue.esProyecto === 'No') {
+                tipoProyecto = 'Evolutivo';
+            }
+            
+            issueDiv.innerHTML = `
+                <label style="display: flex; align-items: center; cursor: pointer; width: 100%;">
+                    <input type="checkbox" value="${issue.key}" style="margin-right: 12px; cursor: pointer;">
+                    <div style="flex: 1; display: flex; align-items: center; justify-content: space-between;">
+                        <div style="font-weight: 600; color: #1f2937; font-size: 1rem; flex: 1;">
+                            ${issue.key} - ${issue.summary}
+                        </div>
+                        <div style="display: flex; gap: 16px; font-size: 0.875rem; color: #6b7280; white-space: nowrap;">
+                            <span>📋 ${tipoProyecto}</span>
+                            <span>📂 ${issue.dominioPrincipal || 'Sin dominio'}</span>
+                            <span>🔄 ${issue.status}</span>
+                        </div>
+                    </div>
+                </label>
+            `;
+
+            // Click en el div selecciona/deselecciona
+            issueDiv.addEventListener('click', (e) => {
+                if (e.target.tagName !== 'INPUT') {
+                    const checkbox = issueDiv.querySelector('input[type="checkbox"]');
+                    checkbox.checked = !checkbox.checked;
+                    this.updateSelectionCount();
+                }
+            });
+
+            // Hover effect
+            issueDiv.addEventListener('mouseenter', () => {
+                issueDiv.style.backgroundColor = '#f9fafb';
+            });
+            issueDiv.addEventListener('mouseleave', () => {
+                issueDiv.style.backgroundColor = 'white';
+            });
+
+            issuesContainer.appendChild(issueDiv);
+        });
+
+        // Añadir event listener para actualizar contador al cambiar checkboxes
+        issuesContainer.addEventListener('change', () => {
+            this.updateSelectionCount();
+        });
+
+        // Actualizar contador inicial
+        this.updateSelectionCount();
+    }
+
+    updateSelectionCount() {
+        const checkboxes = document.querySelectorAll('#jira-issues-list input[type="checkbox"]');
+        const checked = document.querySelectorAll('#jira-issues-list input[type="checkbox"]:checked');
+        const counter = document.getElementById('jira-selection-count');
+        const importBtn = document.getElementById('jira-import-selected-btn');
+        
+        counter.textContent = `${checked.length} de ${checkboxes.length} seleccionados`;
+        importBtn.disabled = checked.length === 0;
+        importBtn.style.opacity = checked.length === 0 ? '0.5' : '1';
+        importBtn.style.cursor = checked.length === 0 ? 'not-allowed' : 'pointer';
+    }
+
+    selectAllIssues() {
+        const checkboxes = document.querySelectorAll('#jira-issues-list input[type="checkbox"]');
+        checkboxes.forEach(cb => cb.checked = true);
+        this.updateSelectionCount();
+    }
+
+    deselectAllIssues() {
+        const checkboxes = document.querySelectorAll('#jira-issues-list input[type="checkbox"]');
+        checkboxes.forEach(cb => cb.checked = false);
+        this.updateSelectionCount();
+    }
+
+    async importSelectedIssues() {
+        const selectedCheckboxes = document.querySelectorAll('#jira-issues-list input[type="checkbox"]:checked');
+        const issueKeys = Array.from(selectedCheckboxes).map(cb => cb.value);
+
+        if (issueKeys.length === 0) {
+            alert('Por favor selecciona al menos un issue para importar');
+            return;
+        }
+
+        if (issueKeys.length > 5) {
+            alert('No se pueden importar más de 5 proyectos a la vez.\n\nActualmente has seleccionado ' + issueKeys.length + ' proyectos.\nPor favor, reduce la selección a un máximo de 5 proyectos.');
+            return;
+        }
+
+        const userTeam = sessionStorage.getItem('user_team');
+        if (!userTeam) {
+            alert('No se pudo obtener el equipo del usuario. Por favor inicia sesión de nuevo.');
+            return;
+        }
+
+        this.showStep('importing');
+        document.getElementById('jira-import-status').textContent = `Importando ${issueKeys.length} issue(s) seleccionado(s)...`;
+
+        try {
+            // El backend usa la configuración del equipo automáticamente
+            const requestBody = {
+                team: userTeam,
+                issueKeys: issueKeys
+            };
+
+            console.log('Importando issues seleccionados:', requestBody);
+
+            const response = await fetch(`${API_CONFIG.BASE_URL}/jira/import`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(requestBody)
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                throw new Error(result.error || 'Error importando desde Jira');
+            }
+
+            // Cerrar modal y recargar página, activando la pestaña de proyectos
+            this.close();
+            
+            // Guardar en sessionStorage que debe activarse la pestaña de proyectos
+            sessionStorage.setItem('activate_projects_tab', 'true');
+            
+            window.location.reload();
+        } catch (error) {
+            console.error('Error:', error);
+            alert(`Error al importar: ${error.message}`);
+            this.showStep(1);
+        }
+    }
+
+    showImportResults(result) {
+        // Ya no se usa - se cierra directamente y se recarga
+        this.close();
+        window.location.reload();
+    }
+}
+
+// Exportar para uso global
+if (typeof window !== 'undefined') {
+    window.JiraModal = JiraModal;
+}

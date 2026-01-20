@@ -1,0 +1,30 @@
+{
+  "name": "gestion-demanda-tests",
+  "version": "1.0.0",
+  "description": "Automated tests for Gestión Demanda - Tareas Conceptualización",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:debug": "playwright test --debug",
+    "test:ui": "playwright test --ui",
+    "test:create": "playwright test specs/create-task.spec.js",
+    "test:delete": "playwright test specs/delete-task.spec.js",
+    "test:ui-validation": "playwright test specs/ui-validation.spec.js",
+    "test:chrome": "playwright test --project=chromium",
+    "test:firefox": "playwright test --project=firefox",
+    "test:webkit": "playwright test --project=webkit",
+    "report": "playwright show-report test-results/html-report"
+  },
+  "keywords": [
+    "playwright",
+    "testing",
+    "e2e",
+    "automation"
+  ],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@playwright/test": "^1.40.0",
+    "@types/node": "^20.10.0"
+  }
+}
