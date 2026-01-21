@@ -2,7 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.handler = void 0;
 const client_1 = require("@prisma/client");
-const response_1 = require("../lib/response");
+const response_1 = require("./lib/response");
 const { getJiraConfigForTeam } = require("./jiraConfig");
 const prisma = new client_1.PrismaClient();
 const handler = async (event) => {
@@ -42,10 +42,25 @@ async function listJiraIssues(event) {
         // Get Jira configuration for the team
         const jiraConfig = getJiraConfigForTeam(userTeam);
         
-        // Optional custom JQL query, otherwise use team default
-        const jqlQuery = event.queryStringParameters?.jqlQuery || jiraConfig.defaultJql;
+        // Check if projectKey parameter is provided
+        const projectKey = event.queryStringParameters?.projectKey;
         
-        console.log(`[listJiraIssues] Team: ${userTeam}, JQL: ${jqlQuery}`);
+        let jqlQuery;
+        if (projectKey) {
+            // Filter by specific project
+            jqlQuery = `project = '${projectKey}' AND status != 'Closed'`;
+            console.log(`[listJiraIssues] Team: ${userTeam}, Filtering by project: ${projectKey}`);
+        } else if (event.queryStringParameters?.jqlQuery) {
+            // Use custom JQL if provided
+            jqlQuery = event.queryStringParameters.jqlQuery;
+            console.log(`[listJiraIssues] Team: ${userTeam}, Using custom JQL`);
+        } else {
+            // Use team default JQL
+            jqlQuery = jiraConfig.defaultJql;
+            console.log(`[listJiraIssues] Team: ${userTeam}, Using default JQL`);
+        }
+        
+        console.log(`[listJiraIssues] JQL: ${jqlQuery}`);
         
         const issues = await fetchJiraIssues(jiraConfig.url, jiraConfig.auth, jqlQuery);
         return (0, response_1.successResponse)({

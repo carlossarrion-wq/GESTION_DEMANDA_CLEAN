@@ -1,0 +1,15 @@
+{
+  "name": "lambda-all-handlers",
+  "version": "1.0.0",
+  "description": "Lambda handlers for Gestion Demanda",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.22.0"
+  },
+  "devDependencies": {
+    "prisma": "^5.22.0"
+  }
+}

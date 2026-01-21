@@ -334,10 +334,31 @@ export class JiraModal {
         const existingFilters = selectionDiv.querySelector('.jira-filters');
         
         if (!existingFilters) {
+            // Cargar proyectos Jira configurados para el equipo
+            const userTeam = sessionStorage.getItem('user_team');
+            const jiraProjects = await this.loadJiraProjectsConfig(userTeam);
+            
+            // Generar opciones del selector
+            const projectOptions = jiraProjects.map(p => 
+                `<option value="${p.key}">${p.key} - ${p.name}</option>`
+            ).join('');
+            
             const filtersHTML = `
                 <div class="jira-filters" style="background-color: #f9fafb; padding: 1rem; border-radius: 6px; margin-bottom: 1rem; border: 1px solid #e5e7eb;">
-                    <!-- Fila 1: Búsqueda (2/3) + Disponibilidad (1/3) -->
-                    <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 0.75rem; margin-bottom: 0.75rem;">
+                    <!-- Fila 1: Proyecto Jira (1/3) + Búsqueda (1/3) + Disponibilidad (1/3) -->
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; margin-bottom: 0.75rem;">
+                        <div>
+                            <label style="display: flex; align-items: center; font-size: 1rem; font-weight: 600; color: #374151; margin-bottom: 0.5rem;">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 16px; height: 16px; margin-right: 0.5rem;">
+                                    <path d="M11.53 2c0 2.4 1.97 4.35 4.35 4.35h1.78v1.7c0 2.4 1.97 4.35 4.35 4.35V2.84a.84.84 0 0 0-.84-.84H11.53zM6.77 6.8c0 2.4 1.97 4.35 4.35 4.35h1.78v1.7c0 2.4 1.97 4.35 4.35 4.35V7.64a.84.84 0 0 0-.84-.84H6.77zM2 11.6c0 2.4 1.97 4.35 4.35 4.35h1.78v1.7c0 2.4 1.97 4.35 4.35 4.35v-9.56a.84.84 0 0 0-.84-.84H2z"/>
+                                </svg>
+                                Proyecto Jira
+                            </label>
+                            <select id="jira-filter-project" class="form-input" style="width: 100%; padding: 0.625rem; border: 1px solid #d1d5db; border-radius: 4px; font-size: 1rem;">
+                                ${projectOptions}
+                            </select>
+                        </div>
+                        
                         <div>
                             <label style="display: flex; align-items: center; font-size: 1rem; font-weight: 600; color: #374151; margin-bottom: 0.5rem;">
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width: 16px; height: 16px; margin-right: 0.5rem;">
@@ -421,6 +442,7 @@ export class JiraModal {
             this.populateFilterOptions(issues);
             
             // Añadir event listeners
+            document.getElementById('jira-filter-project').addEventListener('change', () => this.onProjectChange());
             document.getElementById('jira-search-input').addEventListener('input', () => this.applyFilters());
             document.getElementById('jira-filter-availability').addEventListener('change', () => this.applyFilters());
             document.getElementById('jira-filter-domain').addEventListener('change', () => this.applyFilters());
@@ -559,6 +581,7 @@ export class JiraModal {
     }
 
     clearFilters() {
+        document.getElementById('jira-filter-project').value = 'NC';
         document.getElementById('jira-search-input').value = '';
         document.getElementById('jira-filter-availability').value = 'Todos';
         document.getElementById('jira-filter-domain').value = '';
@@ -725,6 +748,158 @@ export class JiraModal {
         // Ya no se usa - se cierra directamente y se recarga
         this.close();
         window.location.reload();
+    }
+
+    /**
+     * Manejar cambio de proyecto Jira
+     */
+    async onProjectChange() {
+        const selectedProject = document.getElementById('jira-filter-project').value;
+        console.log(`Proyecto cambiado a: ${selectedProject}`);
+        
+        // Mostrar loading
+        const issuesContainer = document.getElementById('jira-issues-list');
+        issuesContainer.innerHTML = '<div style="text-align: center; padding: 2rem;"><div class="spinner"></div><p style="margin-top: 1rem; color: #6b7280;">Cargando issues del proyecto ' + selectedProject + '...</p></div>';
+        
+        try {
+            const userTeam = sessionStorage.getItem('user_team');
+            const awsAccessKey = sessionStorage.getItem('aws_access_key');
+            
+            // Llamar al backend con el proyecto específico
+            const listUrl = `${API_CONFIG.BASE_URL}/jira/issues?projectKey=${selectedProject}`;
+            
+            console.log(`Cargando issues del proyecto ${selectedProject}`);
+            
+            const response = await fetch(listUrl, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                    'Authorization': awsAccessKey,
+                    'x-user-team': userTeam
+                }
+            });
+            
+            const result = await response.json();
+            
+            if (!response.ok) {
+                throw new Error(result.error?.message || result.error || 'Error consultando Jira');
+            }
+            
+            // Manejar nueva estructura
+            let issues;
+            if (result.success && result.data) {
+                issues = result.data.issues;
+            } else if (Array.isArray(result)) {
+                issues = result;
+            } else {
+                issues = result.issues;
+            }
+            
+            console.log(`✅ Cargados ${issues.length} issues del proyecto ${selectedProject}`);
+            
+            // Actualizar allIssues
+            this.allIssues = issues;
+            
+            // Marcar disponibilidad
+            this.markIssuesAvailability();
+            
+            // Repoblar filtros con los nuevos datos
+            this.repopulateFilterOptions(issues);
+            
+            // Aplicar filtros actuales
+            this.applyFilters();
+            
+        } catch (error) {
+            console.error('Error cargando issues del proyecto:', error);
+            issuesContainer.innerHTML = '<p style="text-align: center; color: #ef4444; padding: 2rem;">Error al cargar issues: ' + error.message + '</p>';
+        }
+    }
+    
+    /**
+     * Repoblar opciones de filtros con nuevos datos
+     */
+    repopulateFilterOptions(issues) {
+        // Limpiar y repoblar dominios
+        const domainSelect = document.getElementById('jira-filter-domain');
+        const currentDomain = domainSelect.value;
+        domainSelect.innerHTML = '<option value="">Todos</option>';
+        
+        const domains = [...new Set(issues.map(i => i.dominioPrincipal || 'Sin dominio'))].sort();
+        domains.forEach(domain => {
+            const option = document.createElement('option');
+            option.value = domain;
+            option.textContent = domain;
+            domainSelect.appendChild(option);
+        });
+        domainSelect.value = currentDomain;
+        
+        // Limpiar y repoblar estados
+        const statusSelect = document.getElementById('jira-filter-status');
+        const currentStatus = statusSelect.value;
+        statusSelect.innerHTML = '<option value="">Todos</option>';
+        
+        const statuses = [...new Set(issues.map(i => i.status))].sort();
+        statuses.forEach(status => {
+            const option = document.createElement('option');
+            option.value = status;
+            option.textContent = status;
+            statusSelect.appendChild(option);
+        });
+        statusSelect.value = currentStatus;
+    }
+
+    /**
+     * Cargar configuración de proyectos Jira para el equipo
+     */
+    async loadJiraProjectsConfig(team) {
+        try {
+            const awsAccessKey = sessionStorage.getItem('aws_access_key');
+            
+            if (!awsAccessKey || !team) {
+                console.warn('No credentials or team for loading Jira projects config');
+                console.warn('awsAccessKey:', awsAccessKey ? 'present' : 'missing');
+                console.warn('team:', team);
+                return [{ key: 'NC', name: 'Naturgy Clientes' }];
+            }
+            
+            console.log(`Loading Jira projects config for team: ${team}`);
+            const url = `${API_CONFIG.BASE_URL}/config?key=jira_projects&team=${team}`;
+            console.log('Request URL:', url);
+            
+            const response = await fetch(url, {
+                headers: {
+                    'Authorization': awsAccessKey,
+                    'x-user-team': team
+                }
+            });
+            
+            console.log('Response status:', response.status);
+            
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.warn(`No config found for team ${team}. Status: ${response.status}, Error: ${errorText}`);
+                console.warn('Using default NC project');
+                return [{ key: 'NC', name: 'Naturgy Clientes' }];
+            }
+            
+            const result = await response.json();
+            console.log('Config response:', result);
+            
+            if (!result.success || !result.data || !result.data.value) {
+                console.warn('Invalid config response structure:', result);
+                console.warn('Using default NC project');
+                return [{ key: 'NC', name: 'Naturgy Clientes' }];
+            }
+            
+            console.log(`✅ Loaded ${result.data.value.length} Jira projects for team ${team}:`, result.data.value);
+            return result.data.value;
+            
+        } catch (error) {
+            console.error('❌ Error loading Jira projects config:', error);
+            console.error('Error details:', error.message, error.stack);
+            console.warn('Using default NC project');
+            return [{ key: 'NC', name: 'Naturgy Clientes' }];
+        }
     }
 }
 
