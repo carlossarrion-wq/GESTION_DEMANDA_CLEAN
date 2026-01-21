@@ -119,7 +119,7 @@
     transition: all var(--transition-normal);
     position: relative;
     overflow: hidden;
-    min-height: 280px;
+    height: 280px;
     display: flex;
     flex-direction: column;
 }
