@@ -1354,40 +1354,50 @@ async function updateKPIsWithFilteredData(assignments) {
         if (utilizationPercent > 80) resourcesOver80++;
     });
     
-    // Get resources from API for capacity calculation
+    // Get REAL capacity from resourceCapacity.js (same logic as the chart)
     const awsAccessKey = sessionStorage.getItem('aws_access_key');
     const userTeam = sessionStorage.getItem('user_team');
     
     let totalCapacity = 0;
     if (awsAccessKey && userTeam) {
-        const resourcesResponse = await fetch(`${API_CONFIG.BASE_URL}/resources`, {
-            headers: {
-                'Authorization': awsAccessKey,
-                'x-user-team': userTeam
-            }
-        });
-        
-        if (resourcesResponse.ok) {
-            const resourcesData = await resourcesResponse.json();
-            const allResources = resourcesData.data?.resources || resourcesData.resources || [];
+        try {
+            // Import the same function used by the chart
+            const { calculateCapacityHoursFromResourceCapacity } = await import('./components/resourceCapacity.js');
             
-            // Filter resources by team
-            const teamResources = allResources.filter(r => r.team === userTeam && r.active);
+            // Get capacity data (base hours - absences)
+            const { potentialAvailableHours } = await calculateCapacityHoursFromResourceCapacity(awsAccessKey, userTeam);
             
-            // Calculate total capacity based on number of months in period
+            // Sum only the months in the selected period
             const dateRange = getPeriodDateRange(window.currentPeriod || 'current');
-            const numberOfMonths = dateRange.length;
+            const monthIndices = dateRange.map(d => d.month - 1); // Convert to 0-based
             
-            // Total capacity = number of active resources × 160h/month × number of months
-            totalCapacity = teamResources.length * 160 * numberOfMonths;
+            totalCapacity = monthIndices.reduce((sum, idx) => sum + (potentialAvailableHours[idx] || 0), 0);
             
-            console.log('Capacity calculation:', {
-                teamResources: teamResources.length,
-                hoursPerMonth: 160,
-                numberOfMonths,
+            console.log('Capacity calculation (from resourceCapacity.js):', {
+                period: window.currentPeriod,
+                monthIndices,
+                potentialAvailableHours,
                 totalCapacity,
-                formula: `${teamResources.length} × 160 × ${numberOfMonths} = ${totalCapacity}`
+                formula: 'Sum of green bars from chart'
             });
+        } catch (error) {
+            console.error('Error calculating capacity from resourceCapacity.js:', error);
+            // Fallback to simple calculation
+            const resourcesResponse = await fetch(`${API_CONFIG.BASE_URL}/resources`, {
+                headers: {
+                    'Authorization': awsAccessKey,
+                    'x-user-team': userTeam
+                }
+            });
+            
+            if (resourcesResponse.ok) {
+                const resourcesData = await resourcesResponse.json();
+                const allResources = resourcesData.data?.resources || resourcesData.resources || [];
+                const teamResources = allResources.filter(r => r.team === userTeam && r.active);
+                const dateRange = getPeriodDateRange(window.currentPeriod || 'current');
+                const numberOfMonths = dateRange.length;
+                totalCapacity = teamResources.length * 160 * numberOfMonths;
+            }
         }
     }
     
