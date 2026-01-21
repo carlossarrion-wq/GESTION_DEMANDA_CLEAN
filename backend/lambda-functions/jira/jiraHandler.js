@@ -146,50 +146,81 @@ async function importFromJira(event) {
         }
         console.log(`[4] Encontrados ${issues.length} issues en Jira`);
         const importedProjects = [];
+        const updatedProjects = [];
+        
         for (const issue of issues) {
             const existingProject = await prisma.project.findFirst({
                 where: { code: issue.key, team }
             });
-            if (existingProject) {
-                console.log(`Proyecto ${issue.key} ya existe, omitiendo...`);
-                continue;
-            }
+            
             try {
                 const startDate = new Date(issue.fields.created);
-                const project = await prisma.project.create({
-                    data: {
-                        code: issue.key,
-                        type: mapIssueTypeToProjectType(issue.fields.issuetype.name),
-                        title: issue.fields.summary,
-                        description: extractPlainText(issue.fields.description),
-                        domain: mapJiraDomainToLocal(issue.fields.customfield_10694?.value),
-                        priority: mapJiraPriorityToLocal(issue.fields.customfield_11346?.value),
-                        status: mapJiraStatusToLocal(issue.fields.status.name),
-                        startDate: startDate,
-                        endDate: issue.fields.duedate ? new Date(issue.fields.duedate) : null,
-                        team,
-                        jiraProjectKey: issue.key.split('-')[0],
-                        jiraUrl: jiraConfig.url
-                    }
-                });
-                importedProjects.push({
-                    project,
-                    assignmentsCount: 0
-                });
-                console.log(`[5] Proyecto ${issue.key} creado exitosamente`);
+                const projectData = {
+                    type: mapIssueTypeToProjectType(issue.fields.issuetype.name),
+                    title: issue.fields.summary,
+                    description: extractPlainText(issue.fields.description),
+                    domain: mapJiraDomainToLocal(issue.fields.customfield_10694?.value),
+                    priority: mapJiraPriorityToLocal(issue.fields.customfield_11346?.value),
+                    status: mapJiraStatusToLocal(issue.fields.status.name),
+                    startDate: startDate,
+                    endDate: issue.fields.duedate ? new Date(issue.fields.duedate) : null,
+                    jiraProjectKey: issue.key.split('-')[0],
+                    jiraUrl: jiraConfig.url
+                };
+                
+                if (existingProject) {
+                    // SINCRONIZAR: Actualizar proyecto existente con datos de Jira
+                    console.log(`[5a] Proyecto ${issue.key} ya existe, sincronizando...`);
+                    const project = await prisma.project.update({
+                        where: { id: existingProject.id },
+                        data: projectData
+                    });
+                    updatedProjects.push({
+                        project,
+                        action: 'updated'
+                    });
+                    console.log(`[5a] Proyecto ${issue.key} sincronizado exitosamente`);
+                } else {
+                    // IMPORTAR: Crear nuevo proyecto
+                    console.log(`[5b] Proyecto ${issue.key} no existe, creando...`);
+                    const project = await prisma.project.create({
+                        data: {
+                            code: issue.key,
+                            team,
+                            ...projectData
+                        }
+                    });
+                    importedProjects.push({
+                        project,
+                        action: 'created'
+                    });
+                    console.log(`[5b] Proyecto ${issue.key} creado exitosamente`);
+                }
             }
             catch (error) {
-                console.error(`Error creando proyecto ${issue.key}:`, error);
+                console.error(`Error procesando proyecto ${issue.key}:`, error);
             }
         }
+        const allProjects = [...importedProjects, ...updatedProjects];
+        
         return (0, response_1.successResponse)({
-            message: `Importados ${importedProjects.length} proyectos con éxito`,
+            message: `Procesados ${allProjects.length} proyectos: ${importedProjects.length} importados, ${updatedProjects.length} sincronizados`,
             imported: importedProjects.map(p => ({
                 code: p.project.code,
                 title: p.project.title,
-                assignmentsCount: p.assignmentsCount
+                action: 'created'
             })),
-            totalIssues: issues.length
+            updated: updatedProjects.map(p => ({
+                code: p.project.code,
+                title: p.project.title,
+                action: 'updated'
+            })),
+            totalIssues: issues.length,
+            stats: {
+                created: importedProjects.length,
+                updated: updatedProjects.length,
+                total: allProjects.length
+            }
         });
     }
     catch (error) {
@@ -405,25 +436,25 @@ function mapJiraPriorityToLocal(prioridadNegocio) {
 }
 function mapJiraStatusToLocal(jiraStatus) {
     const status = jiraStatus.toLowerCase();
-    if (status.includes('cancelado'))
-        return 0;
-    if (status.includes('concepto'))
-        return 1;
-    if (status.includes('desarrollo'))
-        return 2;
-    if (status.includes('diseño') || status.includes('diseno'))
-        return 3;
-    if (status.includes('finalizado'))
-        return 4;
     if (status.includes('idea'))
+        return 1;
+    if (status.includes('concepto'))
+        return 2;
+    if (status.includes('viabilidad'))
+        return 3;
+    if (status.includes('diseño') || status.includes('diseno'))
+        return 4;
+    if (status.includes('desarrollo'))
         return 5;
     if (status.includes('implantado'))
         return 6;
-    if (status.includes('on hold'))
+    if (status.includes('finalizado'))
         return 7;
-    if (status.includes('viabilidad'))
+    if (status.includes('on hold'))
         return 8;
-    return 1;
+    if (status.includes('cancelado'))
+        return 9;
+    return 1; // Por defecto: Idea
 }
 function extractPlainText(description) {
     if (!description)

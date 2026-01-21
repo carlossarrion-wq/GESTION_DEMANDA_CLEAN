@@ -9,6 +9,8 @@ import { initializeDropdowns, populateDomainDropdown, populateStatusDropdown } f
 // Modal state
 let currentProjectId = null;
 let isEditMode = false;
+let isSaving = false; // Flag to prevent double submission
+let isDeleting = false; // Flag to prevent double deletion
 
 /**
  * Initialize modal event listeners
@@ -88,7 +90,7 @@ export function openCreateProjectModal() {
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width: 24px; height: 24px; display: inline-block; margin-right: 8px; vertical-align: middle;">
             <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
         </svg>
-        Crear Nuevo Proyecto
+        Añadir Proyecto
     `;
     
     // Load dropdowns (synchronous now)
@@ -334,9 +336,26 @@ function clearFormErrors() {
  * Save project (create or update)
  */
 export async function saveProject() {
+    // Prevent double submission
+    if (isSaving) {
+        console.log('Save already in progress, ignoring duplicate request');
+        return;
+    }
+    
     // Validate form
     if (!validateForm()) {
         return;
+    }
+    
+    // Set saving flag
+    isSaving = true;
+    
+    // Disable save button
+    const saveButton = document.querySelector('#projectModal .btn-success');
+    if (saveButton) {
+        saveButton.disabled = true;
+        saveButton.style.opacity = '0.6';
+        saveButton.style.cursor = 'not-allowed';
     }
     
     // Get form data
@@ -411,6 +430,15 @@ export async function saveProject() {
     } catch (error) {
         console.error('Error saving project:', error);
         showNotification(error.message || 'Error al guardar el proyecto', 'error');
+    } finally {
+        // Reset saving flag and re-enable button
+        isSaving = false;
+        const saveButton = document.querySelector('#projectModal .btn-success');
+        if (saveButton) {
+            saveButton.disabled = false;
+            saveButton.style.opacity = '1';
+            saveButton.style.cursor = 'pointer';
+        }
     }
 }
 
@@ -449,6 +477,23 @@ export function closeDeleteModal() {
 export async function confirmDelete() {
     if (!currentProjectId) {
         return;
+    }
+    
+    // Prevent double deletion
+    if (isDeleting) {
+        console.log('Delete already in progress, ignoring duplicate request');
+        return;
+    }
+    
+    // Set deleting flag
+    isDeleting = true;
+    
+    // Disable delete button
+    const deleteButton = document.querySelector('#deleteModal .btn-danger');
+    if (deleteButton) {
+        deleteButton.disabled = true;
+        deleteButton.style.opacity = '0.6';
+        deleteButton.style.cursor = 'not-allowed';
     }
     
     try {
@@ -522,6 +567,15 @@ export async function confirmDelete() {
     } catch (error) {
         console.error('Error deleting project:', error);
         showNotification(error.message || 'Error al eliminar el proyecto', 'error');
+    } finally {
+        // Reset deleting flag and re-enable button
+        isDeleting = false;
+        const deleteButton = document.querySelector('#deleteModal .btn-danger');
+        if (deleteButton) {
+            deleteButton.disabled = false;
+            deleteButton.style.opacity = '1';
+            deleteButton.style.cursor = 'pointer';
+        }
     }
 }
 

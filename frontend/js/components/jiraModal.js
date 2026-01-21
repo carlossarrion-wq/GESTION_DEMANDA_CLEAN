@@ -24,7 +24,7 @@ export class JiraModal {
                     <div class="modal-header">
                         <h2><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 24px; height: 24px; display: inline-block; vertical-align: middle; margin-right: 8px;">
   <path d="M11.53 2c0 2.4 1.97 4.35 4.35 4.35h1.78v1.7c0 2.4 1.97 4.35 4.35 4.35V2.84a.84.84 0 0 0-.84-.84H11.53zM6.77 6.8c0 2.4 1.97 4.35 4.35 4.35h1.78v1.7c0 2.4 1.97 4.35 4.35 4.35V7.64a.84.84 0 0 0-.84-.84H6.77zM2 11.6c0 2.4 1.97 4.35 4.35 4.35h1.78v1.7c0 2.4 1.97 4.35 4.35 4.35v-9.56a.84.84 0 0 0-.84-.84H2z"/>
-</svg> Importar desde Jira</h2>
+</svg> Importar / Sincronizar desde Jira</h2>
                         <button class="modal-close" onclick="window.jiraModal.close()">&times;</button>
                     </div>
                     <div class="modal-body">
@@ -79,7 +79,7 @@ export class JiraModal {
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width: 20px; height: 20px;">
                                         <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
                                     </svg>
-                                    Importar
+                                    Importar / Sincronizar
                                 </button>
                             </div>
                         </div>
@@ -87,7 +87,10 @@ export class JiraModal {
                         <div id="jira-selection" class="jira-step" style="display: none;">
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; padding: 0.75rem; background-color: #f3f4f6; border-radius: 6px;">
                                 <span id="jira-selection-count" style="font-weight: 600; color: #374151; font-size: 1rem;">0 de 0 seleccionados</span>
-                                <div>
+                                <div style="display: flex; gap: 0.75rem;">
+                                    <button onclick="window.jiraModal.selectAllIssues()" class="btn btn-primary" style="padding: 0.625rem 1.25rem; font-size: 1rem;">
+                                        Seleccionar Todos
+                                    </button>
                                     <button onclick="window.jiraModal.deselectAllIssues()" class="btn btn-secondary" style="padding: 0.625rem 1.25rem; font-size: 1rem;">
                                         Deseleccionar Todos
                                     </button>
@@ -106,7 +109,7 @@ export class JiraModal {
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width: 20px; height: 20px;">
                                         <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
                                     </svg>
-                                    Importar Seleccionados
+                                    Importar / Sincronizar Seleccionados
                                 </button>
                             </div>
                         </div>
@@ -306,7 +309,7 @@ export class JiraModal {
         }
     }
 
-    showIssueSelection(issues) {
+    async showIssueSelection(issues) {
         if (!issues || issues.length === 0) {
             alert('No se encontraron issues con el JQL proporcionado');
             this.showStep(1);
@@ -316,7 +319,13 @@ export class JiraModal {
         // Guardar issues originales para filtrado
         this.allIssues = issues;
 
-        // Mostrar paso de selección
+        // Cargar proyectos existentes de RDS para comparación
+        await this.loadExistingProjects();
+
+        // Marcar cada issue con si existe o no en RDS
+        this.markIssuesAvailability();
+
+        // Mostrar paso de selección DESPUÉS de marcar disponibilidad
         document.getElementById('jira-importing').style.display = 'none';
         document.getElementById('jira-selection').style.display = 'block';
 
@@ -327,16 +336,33 @@ export class JiraModal {
         if (!existingFilters) {
             const filtersHTML = `
                 <div class="jira-filters" style="background-color: #f9fafb; padding: 1rem; border-radius: 6px; margin-bottom: 1rem; border: 1px solid #e5e7eb;">
-                    <div style="margin-bottom: 0.75rem;">
-                        <label style="display: flex; align-items: center; font-size: 1rem; font-weight: 600; color: #374151; margin-bottom: 0.5rem;">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width: 16px; height: 16px; margin-right: 0.5rem;">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-                            </svg>
-                            Buscar por Título o ID
-                        </label>
-                        <input type="text" id="jira-search-input" class="form-input" 
-                               placeholder="Buscar en título o key..." 
-                               style="width: 100%; padding: 0.625rem; border: 1px solid #d1d5db; border-radius: 4px; font-size: 1rem;">
+                    <!-- Fila 1: Búsqueda (2/3) + Disponibilidad (1/3) -->
+                    <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 0.75rem; margin-bottom: 0.75rem;">
+                        <div>
+                            <label style="display: flex; align-items: center; font-size: 1rem; font-weight: 600; color: #374151; margin-bottom: 0.5rem;">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width: 16px; height: 16px; margin-right: 0.5rem;">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                                </svg>
+                                Buscar por Título o ID
+                            </label>
+                            <input type="text" id="jira-search-input" class="form-input" 
+                                   placeholder="Buscar en título o key..." 
+                                   style="width: 100%; padding: 0.625rem; border: 1px solid #d1d5db; border-radius: 4px; font-size: 1rem;">
+                        </div>
+                        
+                        <div>
+                            <label style="display: flex; align-items: center; font-size: 1rem; font-weight: 600; color: #374151; margin-bottom: 0.5rem;">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width: 16px; height: 16px; margin-right: 0.5rem;">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                Estado de Importación
+                            </label>
+                            <select id="jira-filter-availability" class="form-input" style="width: 100%; padding: 0.625rem; border: 1px solid #d1d5db; border-radius: 4px; font-size: 1rem;">
+                                <option value="Todos">Todos</option>
+                                <option value="Importados">Importados</option>
+                                <option value="No importados">No importados</option>
+                            </select>
+                        </div>
                     </div>
                     
                     <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem;">
@@ -396,14 +422,72 @@ export class JiraModal {
             
             // Añadir event listeners
             document.getElementById('jira-search-input').addEventListener('input', () => this.applyFilters());
+            document.getElementById('jira-filter-availability').addEventListener('change', () => this.applyFilters());
             document.getElementById('jira-filter-domain').addEventListener('change', () => this.applyFilters());
             document.getElementById('jira-filter-status').addEventListener('change', () => this.applyFilters());
             document.getElementById('jira-filter-type').addEventListener('change', () => this.applyFilters());
             document.getElementById('jira-clear-filters').addEventListener('click', () => this.clearFilters());
         }
 
-        // Renderizar issues
-        this.renderIssues(issues);
+        // Renderizar issues con los datos ya marcados (this.allIssues tiene existsInDB)
+        this.renderIssues(this.allIssues);
+    }
+
+    /**
+     * Cargar proyectos existentes de RDS para comparación
+     */
+    async loadExistingProjects() {
+        try {
+            const awsAccessKey = sessionStorage.getItem('aws_access_key');
+            const userTeam = sessionStorage.getItem('user_team');
+            
+            if (!awsAccessKey || !userTeam) {
+                console.warn('No se pudieron obtener credenciales para cargar proyectos existentes');
+                this.existingProjects = [];
+                return;
+            }
+
+            const response = await fetch(`${API_CONFIG.BASE_URL}/projects`, {
+                headers: {
+                    'Authorization': awsAccessKey,
+                    'x-user-team': userTeam
+                }
+            });
+
+            if (!response.ok) {
+                console.warn('Error al cargar proyectos existentes');
+                this.existingProjects = [];
+                return;
+            }
+
+            const data = await response.json();
+            this.existingProjects = data.data?.projects || data.projects || [];
+            
+            console.log(`Cargados ${this.existingProjects.length} proyectos existentes de RDS`);
+        } catch (error) {
+            console.error('Error cargando proyectos existentes:', error);
+            this.existingProjects = [];
+        }
+    }
+
+    /**
+     * Marcar cada issue de Jira con si existe o no en RDS
+     */
+    markIssuesAvailability() {
+        if (!this.existingProjects || !this.allIssues) return;
+
+        // Crear Set de códigos existentes para búsqueda rápida O(1)
+        const existingCodes = new Set(
+            this.existingProjects.map(p => p.code)
+        );
+
+        // Marcar cada issue
+        this.allIssues = this.allIssues.map(issue => ({
+            ...issue,
+            existsInDB: existingCodes.has(issue.key)
+        }));
+
+        console.log(`Marcados ${this.allIssues.filter(i => i.existsInDB).length} issues como existentes en RDS`);
     }
 
     populateFilterOptions(issues) {
@@ -432,6 +516,7 @@ export class JiraModal {
 
     applyFilters() {
         const searchText = document.getElementById('jira-search-input').value.toLowerCase();
+        const filterAvailability = document.getElementById('jira-filter-availability').value;
         const filterDomain = document.getElementById('jira-filter-domain').value;
         const filterStatus = document.getElementById('jira-filter-status').value;
         const filterType = document.getElementById('jira-filter-type').value;
@@ -441,6 +526,15 @@ export class JiraModal {
             const matchesSearch = !searchText || 
                 issue.key.toLowerCase().includes(searchText) || 
                 issue.summary.toLowerCase().includes(searchText);
+            
+            // Filtro de estado de importación
+            let matchesAvailability = true;
+            if (filterAvailability === 'Importados') {
+                matchesAvailability = issue.existsInDB === true;
+            } else if (filterAvailability === 'No importados') {
+                matchesAvailability = issue.existsInDB === false;
+            }
+            // Si es "Todos", matchesAvailability permanece true
             
             // Filtro de dominio
             const matchesDomain = !filterDomain || 
@@ -452,7 +546,7 @@ export class JiraModal {
             // Filtro de tipo
             const matchesType = !filterType || issue.esProyecto === filterType;
             
-            return matchesSearch && matchesDomain && matchesStatus && matchesType;
+            return matchesSearch && matchesAvailability && matchesDomain && matchesStatus && matchesType;
         });
         
         this.renderIssues(filtered);
@@ -466,6 +560,7 @@ export class JiraModal {
 
     clearFilters() {
         document.getElementById('jira-search-input').value = '';
+        document.getElementById('jira-filter-availability').value = 'Todos';
         document.getElementById('jira-filter-domain').value = '';
         document.getElementById('jira-filter-status').value = '';
         document.getElementById('jira-filter-type').value = '';
@@ -491,17 +586,23 @@ export class JiraModal {
                 tipoProyecto = 'Evolutivo';
             }
             
+            // Badge de disponibilidad
+            const availabilityBadge = issue.existsInDB 
+                ? '<span style="display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.25rem 0.625rem; background: #d1fae5; color: #065f46; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; white-space: nowrap;"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width: 12px; height: 12px;"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg> Importado</span>'
+                : '<span style="display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.25rem 0.625rem; background: #dbeafe; color: #1e40af; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; white-space: nowrap;"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width: 12px; height: 12px;"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg> Nuevo</span>';
+            
             issueDiv.innerHTML = `
                 <label style="display: flex; align-items: center; cursor: pointer; width: 100%;">
                     <input type="checkbox" value="${issue.key}" style="margin-right: 12px; cursor: pointer;">
-                    <div style="flex: 1; display: flex; align-items: center; justify-content: space-between;">
-                        <div style="font-weight: 600; color: #1f2937; font-size: 1rem; flex: 1;">
+                    <div style="flex: 1; display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+                        <div style="font-weight: 600; color: #1f2937; font-size: 1.1rem; flex: 1;">
                             ${issue.key} - ${issue.summary}
                         </div>
-                        <div style="display: flex; gap: 16px; font-size: 0.875rem; color: #6b7280; white-space: nowrap;">
+                        <div style="display: flex; align-items: center; gap: 12px; font-size: 0.875rem; color: #6b7280; white-space: nowrap;">
                             <span>📋 ${tipoProyecto}</span>
                             <span>📂 ${issue.dominioPrincipal || 'Sin dominio'}</span>
                             <span>🔄 ${issue.status}</span>
+                            ${availabilityBadge}
                         </div>
                     </div>
                 </label>
@@ -569,8 +670,8 @@ export class JiraModal {
             return;
         }
 
-        if (issueKeys.length > 5) {
-            alert('No se pueden importar más de 5 proyectos a la vez.\n\nActualmente has seleccionado ' + issueKeys.length + ' proyectos.\nPor favor, reduce la selección a un máximo de 5 proyectos.');
+        if (issueKeys.length > 10) {
+            alert('No se pueden importar más de 10 proyectos a la vez.\n\nActualmente has seleccionado ' + issueKeys.length + ' proyectos.\nPor favor, reduce la selección a un máximo de 10 proyectos.');
             return;
         }
 

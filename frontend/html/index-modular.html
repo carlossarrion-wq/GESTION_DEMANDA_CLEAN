@@ -177,7 +177,7 @@
 
                         <div class="kpi-card">
                             <div class="kpi-header">
-                                <span class="kpi-label">CAPACIDAD DISPONIBLE</span>
+                                <span class="kpi-label">CAPACIDAD INICIAL DISPONIBLE</span>
                             </div>
                             <div class="kpi-value" id="capacidad-total">-</div>
                             <div class="kpi-subtitle">horas disponibles (excl. ausencias)</div>
@@ -230,11 +230,7 @@
                 </div>
 
                 <!-- Desglose de proyectos por recurso (Tabla de Planificación) -->
-                <div class="section-header" style="margin-top: 2rem;">
-                    <h2>Desglose de Proyectos por Recurso</h2>
-                </div>
-
-                <div class="card">
+                <div class="card" style="margin-top: 2rem;">
                     <h2>Planificación de Recursos por Proyecto y Mes</h2>
                     <div class="capacity-matrix">
                         <table>
@@ -274,11 +270,34 @@
                 </div>
 
                 <!-- Esfuerzo Incurrido vs. Planificado -->
-                <div class="section-header" style="margin-top: 2rem;">
+                <div class="card" style="margin-top: 2rem;">
                     <h2>Esfuerzo Incurrido vs. Planificado</h2>
-                </div>
-
-                <div class="card">
+                    
+                    <!-- Search, Info and Pagination in one line -->
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; gap: 1rem;">
+                        <!-- Search on the left -->
+                        <div style="flex: 0 0 300px;">
+                            <input type="text" id="effort-tracking-search" class="form-control" placeholder="Buscar proyectos..."
+                                style="width: 100%; padding: 0.5rem; border: 1px solid #e2e8f0; border-radius: 0.375rem;">
+                        </div>
+                        
+                        <!-- Info centered -->
+                        <div id="effort-info-center" class="pagination-info" style="flex: 1; text-align: center;">
+                            <span id="effort-tracking-info">Showing 0-0 of 0 projects</span>
+                        </div>
+                        
+                        <!-- Pagination controls on the right -->
+                        <div id="effort-pagination-container" class="pagination-buttons" style="flex: 0 0 auto; display: flex; align-items: center; gap: 0.5rem;">
+                            <button id="prev-effort-btn" class="btn" onclick="loadPreviousEffortPage()" disabled>
+                                ←
+                            </button>
+                            <span id="effort-page-info">Page 1</span>
+                            <button id="next-effort-btn" class="btn" onclick="loadNextEffortPage()" disabled>
+                                →
+                            </button>
+                        </div>
+                    </div>
+                    
                     <div style="overflow-x: auto;">
                         <table>
                             <thead>
@@ -480,20 +499,35 @@
                                 </svg>
                                 Añadir Proyecto
                             </button>
-                            <button class="btn btn-primary" id="import-jira-btn" title="Importar desde Jira">
+                            <button class="btn btn-primary" id="import-jira-btn" title="Importar / Sincronizar desde Jira">
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"
                                     style="width: 20px; height: 20px;">
                                     <path
                                         d="M11.53 2c0 2.4 1.97 4.35 4.35 4.35h1.78v1.7c0 2.4 1.97 4.35 4.35 4.35V2.84a.84.84 0 0 0-.84-.84H11.53zM6.77 6.8c0 2.4 1.97 4.35 4.35 4.35h1.78v1.7c0 2.4 1.97 4.35 4.35 4.35V7.64a.84.84 0 0 0-.84-.84H6.77zM2 11.6c0 2.4 1.97 4.35 4.35 4.35h1.78v1.7c0 2.4 1.97 4.35 4.35 4.35v-9.56a.84.84 0 0 0-.84-.84H2z" />
                                 </svg>
-                                Importar desde Jira
+                                Importar / Sincronizar desde Jira
                             </button>
                         </div>
                     </div>
-                    <div style="margin-bottom: 1rem;">
-                        <input type="text" id="project-search" class="form-control" placeholder="Buscar proyectos..."
-                            style="max-width: 300px; padding: 0.5rem; border: 1px solid #e2e8f0; border-radius: 0.375rem;">
+                    <!-- Search, Info and Pagination in one line -->
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; gap: 1rem;">
+                        <!-- Search on the left -->
+                        <div style="flex: 0 0 300px;">
+                            <input type="text" id="project-search" class="form-control" placeholder="Buscar proyectos..."
+                                style="width: 100%; padding: 0.5rem; border: 1px solid #e2e8f0; border-radius: 0.375rem;">
+                        </div>
+                        
+                        <!-- Info centered -->
+                        <div id="pagination-info-center" class="pagination-info" style="flex: 1; text-align: center;">
+                            <span id="projects-info-text">Showing 0-0 of 0 projects</span>
+                        </div>
+                        
+                        <!-- Pagination controls on the right -->
+                        <div id="pagination-container" class="pagination-buttons" style="flex: 0 0 auto; display: flex; align-items: center; gap: 0.5rem;">
+                            <!-- Populated by JavaScript -->
+                        </div>
                     </div>
+                    
                     <div style="overflow-x: auto;">
                         <table>
                             <thead>
@@ -515,9 +549,6 @@
                             </tbody>
                         </table>
                     </div>
-
-                    <!-- Pagination Container -->
-                    <div id="pagination-container" class="pagination-container"></div>
                 </div>
             </div>
         </div>
@@ -791,32 +822,6 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" onclick="closeResourceModal()">Cancelar</button>
                 <button type="button" class="btn btn-primary" onclick="saveResource()">Guardar</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Delete Resource Confirmation Modal -->
-    <div id="deleteResourceModal" class="modal-overlay">
-        <div class="modal-container delete-modal">
-            <div class="modal-header">
-                <h2>Confirmar Eliminación</h2>
-                <button class="modal-close" onclick="closeDeleteResourceModal()">&times;</button>
-            </div>
-            <div class="modal-body">
-                <p class="delete-modal-message">¿Está seguro de que desea marcar como inactivo el recurso?</p>
-                <span class="delete-modal-project-name" id="deleteResourceName"></span>
-                <div class="delete-modal-warning">
-                    <span class="delete-modal-warning-icon">⚠️</span>
-                    <div class="delete-modal-warning-text">
-                        <strong>Advertencia:</strong> El recurso será marcado como inactivo y no aparecerá en las vistas
-                        de capacidad.
-                    </div>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" onclick="closeDeleteResourceModal()">Cancelar</button>
-                <button type="button" class="btn btn-danger" onclick="confirmDeleteResource()">Marcar como
-                    Inactivo</button>
             </div>
         </div>
     </div>

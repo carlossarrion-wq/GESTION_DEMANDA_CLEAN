@@ -13,6 +13,8 @@ export class ResourceCapacityModal {
         this.resourceData = null;
         this.modalElement = null;
         this.isInitialized = false;
+        this.isSaving = false; // Flag to prevent double submission
+        this.isDeleting = false; // Flag to prevent double deletion
     }
 
     /**
@@ -299,12 +301,12 @@ export class ResourceCapacityModal {
             this.gridApi = null;
         }
 
-        // Initialize AG Grid
-        this.initializeGrid(committedHours, absenceHours);
-
-        // Show modal
+        // Show modal first
         this.modalElement.classList.add('active');
         document.body.style.overflow = 'hidden';
+
+        // Initialize AG Grid (async - will load library if needed)
+        await this.initializeGrid(committedHours, absenceHours);
     }
 
     /**
@@ -492,7 +494,13 @@ export class ResourceCapacityModal {
     /**
      * Initialize AG Grid
      */
-    initializeGrid(committedHours = {}, absenceHours = {}) {
+    async initializeGrid(committedHours = {}, absenceHours = {}) {
+        // Load AG Grid if not already loaded
+        if (typeof agGrid === 'undefined') {
+            console.log('AG Grid not loaded, loading now...');
+            await window.loadAGGrid();
+        }
+        
         const gridDiv = document.getElementById('capacity-grid');
 
         // Base column definition
@@ -673,15 +681,42 @@ export class ResourceCapacityModal {
      * Save all data (resource info + capacity)
      */
     async saveAll() {
-        // First save resource info
-        const resourceSaved = await this.saveResourceInfo();
-        
-        if (!resourceSaved) {
-            return; // Stop if resource info failed to save
+        // Prevent double submission
+        if (this.isSaving) {
+            console.log('Save already in progress, ignoring duplicate request');
+            return;
         }
         
-        // Then save capacity
-        await this.saveCapacity();
+        // Set saving flag
+        this.isSaving = true;
+        
+        // Disable save button
+        const saveButton = document.getElementById('save-capacity-modal');
+        if (saveButton) {
+            saveButton.disabled = true;
+            saveButton.style.opacity = '0.6';
+            saveButton.style.cursor = 'not-allowed';
+        }
+        
+        try {
+            // First save resource info
+            const resourceSaved = await this.saveResourceInfo();
+            
+            if (!resourceSaved) {
+                return; // Stop if resource info failed to save
+            }
+            
+            // Then save capacity
+            await this.saveCapacity();
+        } finally {
+            // Reset saving flag and re-enable button
+            this.isSaving = false;
+            if (saveButton) {
+                saveButton.disabled = false;
+                saveButton.style.opacity = '1';
+                saveButton.style.cursor = 'pointer';
+            }
+        }
     }
 
     /**
@@ -1116,12 +1151,12 @@ export class ResourceCapacityModal {
         console.log('showDeleteConfirmation called');
         console.log('Resource data:', this.resourceData);
         
-        // Create confirmation modal HTML
+        // Create confirmation modal HTML - same style as project deletion modal
         const confirmModalHTML = `
             <div id="delete-resource-confirmation-modal" class="modal-overlay active" style="z-index: 10000;">
-                <div class="modal-container" style="max-width: 500px;">
-                    <div class="modal-header" style="background: #fee2e2; border-bottom: 2px solid #dc2626;">
-                        <h2 style="color: #991b1b; display: flex; align-items: center; gap: 8px;">
+                <div class="modal-container modal-small">
+                    <div class="modal-header">
+                        <h2 style="display: flex; align-items: center; gap: 0.5rem;">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width: 24px; height: 24px;">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
                             </svg>
@@ -1130,28 +1165,21 @@ export class ResourceCapacityModal {
                         <button class="modal-close" id="close-delete-confirmation">&times;</button>
                     </div>
                     <div class="modal-body">
-                        <p style="font-size: 1.1rem; margin-bottom: 1rem;">
+                        <p style="margin: 0 0 1rem 0; font-size: 1rem; color: var(--text-primary);">
                             Se va a eliminar el recurso <strong>${this.resourceData?.name || 'este recurso'}</strong>
                         </p>
-                        <div style="background: #fee2e2; border-left: 4px solid #dc2626; padding: 1rem; border-radius: 4px;">
-                            <p style="color: #991b1b; font-weight: 600; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 8px;">
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width: 20px; height: 20px;">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-                                </svg>
-                                Advertencia:
-                            </p>
-                            <p style="color: #7f1d1d; margin: 0;">
-                                Esta acción desencadena la eliminación de todos los datos asociados al recurso, incluyendo todas sus asignaciones a proyectos.
-                            </p>
+                        <div style="display: flex; align-items: flex-start; gap: 0.75rem; padding: 1rem; background: #FAE5E4; border-left: 4px solid #f59e0b; border-radius: var(--radius-md);">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width: 20px; height: 20px; flex-shrink: 0; color: #f59e0b; margin-top: 0.1rem;">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                            </svg>
+                            <div style="font-size: 0.9rem; color: #92400e; line-height: 1.5;">
+                                <strong>Advertencia:</strong> Esta acción desencadena la eliminación de todos los datos asociados al recurso, incluyendo todas sus asignaciones a proyectos.
+                            </div>
                         </div>
                     </div>
-                    <div class="modal-footer" style="display: flex; justify-content: space-between; gap: 1rem;">
-                        <button type="button" class="btn btn-secondary" id="cancel-delete-resource" style="flex: 1;">
-                            Cancelar
-                        </button>
-                        <button type="button" class="btn btn-danger" id="confirm-delete-resource" style="flex: 1; background: #dc2626; border-color: #dc2626;">
-                            Eliminar Recurso
-                        </button>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" id="cancel-delete-resource">Cancelar</button>
+                        <button type="button" class="btn btn-danger" id="confirm-delete-resource">Eliminar Recurso</button>
                     </div>
                 </div>
             </div>
@@ -1189,6 +1217,15 @@ export class ResourceCapacityModal {
      * Delete resource and all its assignments
      */
     async deleteResource() {
+        // Prevent double deletion
+        if (this.isDeleting) {
+            console.log('Delete already in progress, ignoring duplicate request');
+            return;
+        }
+        
+        // Set deleting flag
+        this.isDeleting = true;
+        
         try {
             const awsAccessKey = sessionStorage.getItem('aws_access_key');
             const userTeam = sessionStorage.getItem('user_team');
@@ -1225,6 +1262,9 @@ export class ResourceCapacityModal {
         } catch (error) {
             console.error('Error deleting resource:', error);
             alert(`❌ Error al eliminar el recurso\n\n${error.message}`);
+        } finally {
+            // Reset deleting flag
+            this.isDeleting = false;
         }
     }
 }

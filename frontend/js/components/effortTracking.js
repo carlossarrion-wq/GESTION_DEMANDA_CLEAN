@@ -3,6 +3,12 @@
 import { API_CONFIG } from '../config/data.js';
 import { formatNumber, getDomainText } from '../utils/helpers.js';
 
+// Pagination state
+let currentPage = 1;
+let itemsPerPage = 10;
+let allProjectMetrics = [];
+let filteredProjectMetrics = [];
+
 /**
  * Load and populate the Effort Tracking table
  */
@@ -80,54 +86,179 @@ export async function initializeEffortTrackingTable() {
             return numB - numA;
         });
         
-        // Populate table
-        tbody.innerHTML = projectMetrics.map(metric => {
-            const { project, initialEstimate, itd, etc, eac, deviationHours, deviationPercent } = metric;
-            
-            // Determine deviation color
-            let deviationClass = '';
-            if (deviationPercent < -10) {
-                deviationClass = 'style="color: #dc2626; font-weight: 600;"'; // Red for over budget
-            } else if (deviationPercent > 10) {
-                deviationClass = 'style="color: #16a34a; font-weight: 600;"'; // Green for under budget
-            }
-            
-            // Truncate title if too long
-            const displayTitle = project.title.length > 40 
-                ? project.title.substring(0, 37) + '...' 
-                : project.title;
-            
-            return `
-                <tr>
-                    <td style="text-align: left;">
-                        <strong>${project.code}</strong> - ${displayTitle}
-                    </td>
-                    <td style="text-align: center;">
-                        ${project.type || 'Proyecto'}
-                    </td>
-                    <td style="text-align: left;">${getDomainText(project.domain)}</td>
-                    <td style="text-align: center;">${formatNumber(initialEstimate)}</td>
-                    <td style="text-align: center;">${formatNumber(itd)}</td>
-                    <td style="text-align: center;">${formatNumber(etc)}</td>
-                    <td style="text-align: center; font-weight: 600;">${formatNumber(eac)}</td>
-                    <td style="text-align: center;" ${deviationClass}>${formatNumber(deviationHours)}</td>
-                    <td style="text-align: center;" ${deviationClass}>${deviationPercent}%</td>
-                </tr>
-            `;
-        }).join('');
+        // Store all metrics for pagination
+        allProjectMetrics = projectMetrics;
+        filteredProjectMetrics = projectMetrics;
+        
+        // Initialize search functionality
+        initializeSearch();
+        
+        // Reset to first page and render
+        currentPage = 1;
+        renderPage(1);
         
         console.log('Effort Tracking table populated with', projectMetrics.length, 'projects');
         
     } catch (error) {
         console.error('Error initializing Effort Tracking table:', error);
-        tbody.innerHTML = `
+        const tbody = document.getElementById('effort-tracking-table-body');
+        if (tbody) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="9" style="text-align: center; padding: 2rem; color: #718096;">
+                        Error al cargar los datos de seguimiento de esfuerzo
+                    </td>
+                </tr>
+            `;
+        }
+    }
+}
+
+/**
+ * Render a specific page of the effort tracking table
+ */
+function renderPage(page) {
+    const tbody = document.getElementById('effort-tracking-table-body');
+    if (!tbody) return;
+    
+    const totalItems = filteredProjectMetrics.length;
+    const totalPages = Math.ceil(totalItems / itemsPerPage);
+    
+    // Validate page number
+    if (page < 1) page = 1;
+    if (page > totalPages) page = totalPages;
+    
+    currentPage = page;
+    
+    // Calculate start and end indices
+    const startIndex = (page - 1) * itemsPerPage;
+    const endIndex = Math.min(startIndex + itemsPerPage, totalItems);
+    
+    // Get items for current page
+    const pageItems = filteredProjectMetrics.slice(startIndex, endIndex);
+    
+    // Render table rows
+    tbody.innerHTML = pageItems.map(metric => {
+        const { project, initialEstimate, itd, etc, eac, deviationHours, deviationPercent } = metric;
+        
+        // Determine deviation color
+        let deviationClass = '';
+        if (deviationPercent < -10) {
+            deviationClass = 'style="color: #dc2626; font-weight: 600;"'; // Red for over budget
+        } else if (deviationPercent > 10) {
+            deviationClass = 'style="color: #16a34a; font-weight: 600;"'; // Green for under budget
+        }
+        
+        // Truncate title if too long
+        const displayTitle = project.title.length > 40 
+            ? project.title.substring(0, 37) + '...' 
+            : project.title;
+        
+        return `
             <tr>
-                <td colspan="9" style="text-align: center; padding: 2rem; color: #718096;">
-                    Error al cargar los datos de seguimiento de esfuerzo
+                <td style="text-align: left;">
+                    <strong>${project.code}</strong> - ${displayTitle}
                 </td>
+                <td style="text-align: center;">
+                    ${project.type || 'Proyecto'}
+                </td>
+                <td style="text-align: left;">${getDomainText(project.domain)}</td>
+                <td style="text-align: center;">${formatNumber(initialEstimate)}</td>
+                <td style="text-align: center;">${formatNumber(itd)}</td>
+                <td style="text-align: center;">${formatNumber(etc)}</td>
+                <td style="text-align: center; font-weight: 600;">${formatNumber(eac)}</td>
+                <td style="text-align: center;" ${deviationClass}>${formatNumber(deviationHours)}</td>
+                <td style="text-align: center;" ${deviationClass}>${deviationPercent}%</td>
             </tr>
         `;
+    }).join('');
+    
+    // Update pagination controls
+    updatePaginationControls(totalItems, totalPages);
+}
+
+/**
+ * Update pagination controls
+ */
+function updatePaginationControls(totalItems, totalPages) {
+    const startIndex = (currentPage - 1) * itemsPerPage + 1;
+    const endIndex = Math.min(currentPage * itemsPerPage, totalItems);
+    
+    // Update info text
+    const infoElement = document.getElementById('effort-tracking-info');
+    if (infoElement) {
+        infoElement.textContent = `Showing ${startIndex}-${endIndex} of ${totalItems} projects`;
     }
+    
+    // Update page info
+    const pageInfoElement = document.getElementById('effort-page-info');
+    if (pageInfoElement) {
+        pageInfoElement.textContent = `Page ${currentPage} of ${totalPages}`;
+    }
+    
+    // Update button states
+    const prevButton = document.getElementById('prev-effort-btn');
+    const nextButton = document.getElementById('next-effort-btn');
+    
+    if (prevButton) {
+        prevButton.disabled = currentPage === 1;
+    }
+    
+    if (nextButton) {
+        nextButton.disabled = currentPage === totalPages || totalPages === 0;
+    }
+}
+
+/**
+ * Navigate to previous page
+ */
+export function loadPreviousEffortPage() {
+    if (currentPage > 1) {
+        renderPage(currentPage - 1);
+    }
+}
+
+/**
+ * Navigate to next page
+ */
+export function loadNextEffortPage() {
+    const totalPages = Math.ceil(filteredProjectMetrics.length / itemsPerPage);
+    if (currentPage < totalPages) {
+        renderPage(currentPage + 1);
+    }
+}
+
+/**
+ * Initialize search functionality
+ */
+function initializeSearch() {
+    const searchInput = document.getElementById('effort-tracking-search');
+    if (!searchInput) return;
+    
+    searchInput.addEventListener('input', function(e) {
+        const searchTerm = e.target.value.toLowerCase().trim();
+        
+        if (!searchTerm) {
+            // No search term, show all projects
+            filteredProjectMetrics = allProjectMetrics;
+        } else {
+            // Filter projects by code, title, or domain
+            filteredProjectMetrics = allProjectMetrics.filter(metric => {
+                const project = metric.project;
+                const code = project.code.toLowerCase();
+                const title = project.title.toLowerCase();
+                const domain = getDomainText(project.domain).toLowerCase();
+                
+                return code.includes(searchTerm) || 
+                       title.includes(searchTerm) || 
+                       domain.includes(searchTerm);
+            });
+        }
+        
+        // Reset to first page and render
+        currentPage = 1;
+        renderPage(1);
+    });
 }
 
 /**

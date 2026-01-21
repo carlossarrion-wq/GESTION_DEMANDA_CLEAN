@@ -9,6 +9,8 @@ import { reloadCapacityData } from './resourceCapacity.js';
 // Modal state
 let currentResourceId = null;
 let isEditMode = false;
+let isSaving = false; // Flag to prevent double submission
+let isDeleting = false; // Flag to prevent double deletion
 
 // Available skills list
 const AVAILABLE_SKILLS = [
@@ -346,9 +348,26 @@ function clearFormErrors() {
  * Save resource (create or update)
  */
 export async function saveResource() {
+    // Prevent double submission
+    if (isSaving) {
+        console.log('Save already in progress, ignoring duplicate request');
+        return;
+    }
+    
     // Validate form
     if (!validateForm()) {
         return;
+    }
+    
+    // Set saving flag
+    isSaving = true;
+    
+    // Disable save button
+    const saveButton = document.querySelector('#resourceModal .btn-primary');
+    if (saveButton) {
+        saveButton.disabled = true;
+        saveButton.style.opacity = '0.6';
+        saveButton.style.cursor = 'not-allowed';
     }
     
     // Get form data
@@ -446,6 +465,15 @@ export async function saveResource() {
     } catch (error) {
         console.error('Error saving resource:', error);
         showNotification(error.message || 'Error al guardar el recurso', 'error');
+    } finally {
+        // Reset saving flag and re-enable button
+        isSaving = false;
+        const saveButton = document.querySelector('#resourceModal .btn-primary');
+        if (saveButton) {
+            saveButton.disabled = false;
+            saveButton.style.opacity = '1';
+            saveButton.style.cursor = 'pointer';
+        }
     }
 }
 
@@ -547,6 +575,23 @@ export async function confirmDeleteResource() {
         return;
     }
     
+    // Prevent double deletion
+    if (isDeleting) {
+        console.log('Delete already in progress, ignoring duplicate request');
+        return;
+    }
+    
+    // Set deleting flag
+    isDeleting = true;
+    
+    // Disable delete button
+    const deleteButton = document.querySelector('#deleteResourceModal .btn-danger');
+    if (deleteButton) {
+        deleteButton.disabled = true;
+        deleteButton.style.opacity = '0.6';
+        deleteButton.style.cursor = 'not-allowed';
+    }
+    
     try {
         // Get authentication tokens
         const awsAccessKey = sessionStorage.getItem('aws_access_key');
@@ -584,6 +629,15 @@ export async function confirmDeleteResource() {
     } catch (error) {
         console.error('Error deleting resource:', error);
         showNotification(error.message || 'Error al eliminar el recurso', 'error');
+    } finally {
+        // Reset deleting flag and re-enable button
+        isDeleting = false;
+        const deleteButton = document.querySelector('#deleteResourceModal .btn-danger');
+        if (deleteButton) {
+            deleteButton.disabled = false;
+            deleteButton.style.opacity = '1';
+            deleteButton.style.cursor = 'pointer';
+        }
     }
 }
 

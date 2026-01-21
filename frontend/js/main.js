@@ -8,7 +8,7 @@ import assignmentsManager from './managers/AssignmentsManager.js';
 import { initializeTabs } from './components/tabs.js';
 import { initializeAllCharts } from './components/charts.js';
 import { initializeKPIs } from './components/kpi.js';
-import { initializeEffortTrackingTable } from './components/effortTracking.js';
+import { initializeEffortTrackingTable, loadPreviousEffortPage, loadNextEffortPage } from './components/effortTracking.js';
 import { 
     initProjectModal, 
     openCreateProjectModal, 
@@ -878,97 +878,48 @@ function renderPagination(totalPages) {
         return;
     }
     
-    paginationContainer.style.display = 'flex';
-    paginationContainer.innerHTML = '';
+    // Calculate display info
+    const startIndex = (currentPage - 1) * projectsPerPage + 1;
+    const endIndex = Math.min(currentPage * projectsPerPage, allProjects.length);
     
-    // Previous button
-    const prevButton = document.createElement('button');
-    prevButton.className = 'pagination-btn';
-    prevButton.innerHTML = '&laquo; Anterior';
-    prevButton.disabled = currentPage === 1;
-    prevButton.onclick = () => {
-        if (currentPage > 1) {
-            currentPage--;
-            updateProjectsTable(allProjects);
-        }
-    };
-    paginationContainer.appendChild(prevButton);
-    
-    // Page numbers
-    const maxVisiblePages = 5;
-    let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
-    let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
-    
-    // Adjust start page if we're near the end
-    if (endPage - startPage < maxVisiblePages - 1) {
-        startPage = Math.max(1, endPage - maxVisiblePages + 1);
+    // Update centered info text
+    const infoText = document.getElementById('projects-info-text');
+    if (infoText) {
+        infoText.textContent = `Showing ${startIndex}-${endIndex} of ${allProjects.length} projects`;
     }
     
-    // First page button if not visible
-    if (startPage > 1) {
-        const firstButton = document.createElement('button');
-        firstButton.className = 'pagination-btn';
-        firstButton.textContent = '1';
-        firstButton.onclick = () => {
-            currentPage = 1;
-            updateProjectsTable(allProjects);
+    // Render pagination buttons in the container
+    paginationContainer.innerHTML = `
+        <button id="prev-projects-btn" class="btn" style="margin-right: 5px;" ${currentPage === 1 ? 'disabled' : ''}>
+            ←
+        </button>
+        <span id="projects-page-info">Page ${currentPage} of ${totalPages}</span>
+        <button id="next-projects-btn" class="btn" style="margin-left: 5px;" ${currentPage === totalPages ? 'disabled' : ''}>
+            →
+        </button>
+    `;
+    
+    // Add event listeners
+    const prevButton = document.getElementById('prev-projects-btn');
+    const nextButton = document.getElementById('next-projects-btn');
+    
+    if (prevButton) {
+        prevButton.onclick = () => {
+            if (currentPage > 1) {
+                currentPage--;
+                updateProjectsTable(allProjects);
+            }
         };
-        paginationContainer.appendChild(firstButton);
-        
-        if (startPage > 2) {
-            const ellipsis = document.createElement('span');
-            ellipsis.className = 'pagination-ellipsis';
-            ellipsis.textContent = '...';
-            paginationContainer.appendChild(ellipsis);
-        }
     }
     
-    // Page number buttons
-    for (let i = startPage; i <= endPage; i++) {
-        const pageButton = document.createElement('button');
-        pageButton.className = 'pagination-btn';
-        if (i === currentPage) {
-            pageButton.classList.add('active');
-        }
-        pageButton.textContent = i;
-        pageButton.onclick = () => {
-            currentPage = i;
-            updateProjectsTable(allProjects);
+    if (nextButton) {
+        nextButton.onclick = () => {
+            if (currentPage < totalPages) {
+                currentPage++;
+                updateProjectsTable(allProjects);
+            }
         };
-        paginationContainer.appendChild(pageButton);
     }
-    
-    // Last page button if not visible
-    if (endPage < totalPages) {
-        if (endPage < totalPages - 1) {
-            const ellipsis = document.createElement('span');
-            ellipsis.className = 'pagination-ellipsis';
-            ellipsis.textContent = '...';
-            paginationContainer.appendChild(ellipsis);
-        }
-        
-        const lastButton = document.createElement('button');
-        lastButton.className = 'pagination-btn';
-        lastButton.textContent = totalPages;
-        lastButton.onclick = () => {
-            currentPage = totalPages;
-            updateProjectsTable(allProjects);
-        };
-        paginationContainer.appendChild(lastButton);
-    }
-    
-    // Next button
-    const nextButton = document.createElement('button');
-    nextButton.className = 'pagination-btn';
-    nextButton.innerHTML = 'Siguiente &raquo;';
-    nextButton.disabled = currentPage === totalPages;
-    nextButton.onclick = () => {
-        if (currentPage < totalPages) {
-            currentPage++;
-            updateProjectsTable(allProjects);
-        }
-    };
-    paginationContainer.appendChild(nextButton);
 }
 
 // Debounce timer for dashboard updates
@@ -1313,14 +1264,16 @@ async function updateKPIsWithFilteredData(assignments) {
         }
     });
     
-    // Count projects by type from unique project IDs
+    // Count projects by type from unique project IDs (excluding ABSENCES)
     let evolutivosCount = 0;
     let proyectosCount = 0;
+    let totalProjectsWithoutAbsences = 0;
     
     uniqueProjects.forEach(projectId => {
         if (window.allProjects) {
             const project = window.allProjects.find(p => p.id === projectId);
             if (project && !project.code.startsWith('ABSENCES')) {
+                totalProjectsWithoutAbsences++;
                 if (project.type === 'Evolutivo') {
                     evolutivosCount++;
                 } else if (project.type === 'Proyecto') {
@@ -1408,11 +1361,14 @@ async function updateKPIsWithFilteredData(assignments) {
     const horasComprometidasEl = document.getElementById('kpi-horas-comprometidas');
     const eficienciaEl = document.getElementById('eficiencia');
     
-    // Main KPI values
-    if (proyectosActivosEl) proyectosActivosEl.textContent = uniqueProjects.size;
+    // Calculate total committed hours as sum of Evolutivos + Proyectos (excluding ABSENCES)
+    const totalCommittedHours = hoursEvolutivos + horasProyectos;
+    
+    // Main KPI values (excluding ABSENCES projects)
+    if (proyectosActivosEl) proyectosActivosEl.textContent = totalProjectsWithoutAbsences;
     if (recursosActivosEl) recursosActivosEl.textContent = uniqueResources.size;
     if (capacidadTotalEl) capacidadTotalEl.textContent = formatNumber(totalCapacity);
-    if (horasComprometidasEl) horasComprometidasEl.textContent = formatNumber(Math.round(assignedHours));
+    if (horasComprometidasEl) horasComprometidasEl.textContent = formatNumber(Math.round(totalCommittedHours));
     
     // Sub-KPIs for PROYECTOS ACTIVOS
     const kpiNumEvolutivosEl = document.getElementById('kpi-num-evolutivos');
@@ -1441,8 +1397,8 @@ async function updateKPIsWithFilteredData(assignments) {
         kpiFtesCapacidadEl.textContent = `${ftesCapacidad} FTEs`;
     }
     
-    // Calculate efficiency (utilization percentage)
-    const efficiency = totalCapacity > 0 ? Math.round((assignedHours / totalCapacity) * 100) : 0;
+    // Calculate efficiency (utilization percentage) = HORAS COMPROMETIDAS / CAPACIDAD DISPONIBLE
+    const efficiency = totalCapacity > 0 ? ((totalCommittedHours / totalCapacity) * 100).toFixed(1) : '0.0';
     if (eficienciaEl) eficienciaEl.textContent = `${efficiency}%`;
     
     // Sub-KPIs for EFICIENCIA
@@ -1455,14 +1411,15 @@ async function updateKPIsWithFilteredData(assignments) {
     }
     
     console.log('KPIs updated with filtered data:', {
-        projects: uniqueProjects.size,
+        projects: totalProjectsWithoutAbsences,
+        totalProjectsIncludingAbsences: uniqueProjects.size,
         evolutivosCount,
         proyectosCount,
         resources: uniqueResources.size,
         resourcesOver50,
         resourcesOver80,
         totalCapacity,
-        assignedHours,
+        totalCommittedHours: totalCommittedHours,
         hoursEvolutivos,
         horasProyectos,
         efficiency
@@ -1483,6 +1440,10 @@ async function updateChartsWithFilteredData(assignments, period) {
     
     console.log('Charts updated with filtered data');
 }
+
+// Make pagination functions globally available for onclick handlers
+window.loadPreviousEffortPage = loadPreviousEffortPage;
+window.loadNextEffortPage = loadNextEffortPage;
 
 // Export for external use if needed
 export { initializeApp, updateProjectsTable, updateDashboard, loadProjectsFromAPI };
