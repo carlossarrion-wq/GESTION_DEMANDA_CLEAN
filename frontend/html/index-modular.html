@@ -15,18 +15,25 @@
     <link rel="stylesheet" href="../css/modal.css">
     <link rel="stylesheet" href="../css/responsive.css">
 
-    <!-- External Libraries -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/moment@2.29.1/moment.min.js"></script>
-
-    <!-- Handsontable for Excel-like interface -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/handsontable@14.1.0/dist/handsontable.full.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/handsontable@14.1.0/dist/handsontable.full.min.js"></script>
-
-    <!-- AG Grid for task management -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@31.0.0/styles/ag-grid.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@31.0.0/styles/ag-theme-alpine.css">
-    <script src="https://cdn.jsdelivr.net/npm/ag-grid-community@31.0.0/dist/ag-grid-community.min.js"></script>
+    <!-- Preconnect to CDN for faster loading -->
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+    
+    <!-- Critical CSS only - defer non-critical -->
+    <link rel="preload" href="../css/base.css" as="style">
+    <link rel="preload" href="../css/layout.css" as="style">
+    
+    <!-- External Libraries - Async loading with defer -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
+    
+    <!-- Lazy load heavy libraries only when needed -->
+    <link rel="preload" href="https://cdn.jsdelivr.net/npm/handsontable@14.1.0/dist/handsontable.full.min.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/handsontable@14.1.0/dist/handsontable.full.min.css"></noscript>
+    
+    <link rel="preload" href="https://cdn.jsdelivr.net/npm/ag-grid-community@31.0.0/styles/ag-grid.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@31.0.0/styles/ag-grid.css"></noscript>
+    
+    <link rel="preload" href="https://cdn.jsdelivr.net/npm/ag-grid-community@31.0.0/styles/ag-theme-alpine.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@31.0.0/styles/ag-theme-alpine.css"></noscript>
 
 </head>
 
@@ -871,7 +878,32 @@
     </div>
 
 
-    <!-- Modular JavaScript (ES6 Modules) -->
+    <!-- Lazy load heavy libraries -->
+    <script>
+        // Lazy load Handsontable only when needed
+        window.loadHandsontable = function() {
+            if (window.Handsontable) return Promise.resolve();
+            return new Promise((resolve) => {
+                const script = document.createElement('script');
+                script.src = 'https://cdn.jsdelivr.net/npm/handsontable@14.1.0/dist/handsontable.full.min.js';
+                script.onload = resolve;
+                document.head.appendChild(script);
+            });
+        };
+        
+        // Lazy load AG Grid only when needed
+        window.loadAGGrid = function() {
+            if (window.agGrid) return Promise.resolve();
+            return new Promise((resolve) => {
+                const script = document.createElement('script');
+                script.src = 'https://cdn.jsdelivr.net/npm/ag-grid-community@31.0.0/dist/ag-grid-community.min.js';
+                script.onload = resolve;
+                document.head.appendChild(script);
+            });
+        };
+    </script>
+    
+    <!-- Modular JavaScript (ES6 Modules) with defer for better performance -->
     <script type="module" src="../js/main.js"></script>
 </body>
 
