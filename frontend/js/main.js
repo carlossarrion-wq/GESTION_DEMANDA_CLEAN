@@ -40,6 +40,9 @@ import {
     getPeriodDateRange
 } from './utils/helpers.js';
 
+// Make getPeriodDateRange globally available for charts
+window.getPeriodDateRange = getPeriodDateRange;
+
 // Global modal instances
 let taskModal = null;
 let conceptTasksModal = null;
@@ -71,8 +74,14 @@ async function initializeApp() {
     
     // Initialize components
     initializeTabs();
-    await initializeKPIs(); // Now async - uses API data
-    initializeAllCharts();
+    
+    // Set initial period from selector BEFORE initializing charts
+    const periodSelector = document.getElementById('period-selector');
+    if (periodSelector) {
+        window.currentPeriod = periodSelector.value || 'next12';
+        console.log('Initial period set to:', window.currentPeriod);
+    }
+    
     initProjectModal();
     initResourceModal();
     initializeResourceCapacity();
@@ -110,6 +119,10 @@ async function initializeApp() {
     
     // Initialize event listeners
     initializeEventListeners();
+    
+    // Apply initial period filter to KPIs
+    const initialPeriod = window.currentPeriod || 'next12';
+    await updateDashboardByPeriod(initialPeriod);
     
     // Check if we need to activate the projects tab after Jira import
     const activateProjectsTab = sessionStorage.getItem('activate_projects_tab');
@@ -724,9 +737,6 @@ async function updateProjectsTable(projects) {
     // Update KPIs immediately after loading projects (without ABSENCES)
     updateMatrixKPIs();
     
-    // Update charts with real data (without ABSENCES)
-    initializeAllCharts();
-    
     // Calculate conceptualization hours for each project
     const conceptHoursMap = await calculateConceptualizationHours(allProjects);
     
@@ -1206,25 +1216,11 @@ async function calculateConceptualizationHours(projects) {
  * @param {string} period - Selected period value ('current', 'next', 'next3', 'next6', 'next12')
  */
 async function updateDashboardByPeriod(period) {
-    console.log(`Updating dashboard for period: ${period}`);
+    console.log('='.repeat(80));
+    console.log(`🔄 UPDATING DASHBOARD FOR PERIOD: ${period}`);
+    console.log('='.repeat(80));
     
     try {
-        // If "current" period, restore original KPIs and charts
-        if (period === 'current') {
-            // Clear global filters
-            window.filteredAssignmentsByPeriod = null;
-            window.currentPeriod = null;
-            
-            // Restore original KPIs using the original function from kpi.js
-            await initializeKPIs();
-            
-            // Restore original charts
-            await initializeAllCharts();
-            
-            console.log('Restored original data for current month');
-            return;
-        }
-        
         const awsAccessKey = sessionStorage.getItem('aws_access_key');
         const userTeam = sessionStorage.getItem('user_team');
         
@@ -1233,9 +1229,10 @@ async function updateDashboardByPeriod(period) {
             return;
         }
         
-        // Get date range for the selected period
+        // Get date range for the selected period (including 'current' which returns 1 month)
         const dateRange = getPeriodDateRange(period);
-        console.log('Date range:', dateRange);
+        console.log('📅 Date range for period', period, ':', dateRange);
+        console.log('📊 Number of months to show:', dateRange.length);
         
         // Fetch all assignments
         const response = await fetch(`${API_CONFIG.BASE_URL}/assignments`, {
@@ -1259,11 +1256,15 @@ async function updateDashboardByPeriod(period) {
             );
         });
         
-        console.log(`Filtered ${filteredAssignments.length} assignments from ${allAssignments.length} total`);
+        console.log(`✅ Filtered ${filteredAssignments.length} assignments from ${allAssignments.length} total for period: ${period}`);
         
         // Store filtered assignments globally for charts
         window.filteredAssignmentsByPeriod = filteredAssignments;
         window.currentPeriod = period;
+        
+        console.log('🌐 Global variables set:');
+        console.log('  - window.filteredAssignmentsByPeriod:', window.filteredAssignmentsByPeriod?.length, 'assignments');
+        console.log('  - window.currentPeriod:', window.currentPeriod);
         
         // Update KPIs with filtered data
         await updateKPIsWithFilteredData(filteredAssignments);
@@ -1285,6 +1286,8 @@ async function updateKPIsWithFilteredData(assignments) {
     const uniqueResources = new Set();
     let totalHours = 0;
     let assignedHours = 0;
+    let hoursEvolutivos = 0;
+    let horasProyectos = 0;
     
     assignments.forEach(assignment => {
         if (assignment.projectId) uniqueProjects.add(assignment.projectId);
@@ -1296,6 +1299,59 @@ async function updateKPIsWithFilteredData(assignments) {
         if (assignment.resourceId) {
             assignedHours += hours;
         }
+        
+        // Calculate hours by project type
+        if (window.allProjects && assignment.projectId) {
+            const project = window.allProjects.find(p => p.id === assignment.projectId);
+            if (project && !project.code.startsWith('ABSENCES')) {
+                if (project.type === 'Evolutivo') {
+                    hoursEvolutivos += hours;
+                } else if (project.type === 'Proyecto') {
+                    horasProyectos += hours;
+                }
+            }
+        }
+    });
+    
+    // Count projects by type from unique project IDs
+    let evolutivosCount = 0;
+    let proyectosCount = 0;
+    
+    uniqueProjects.forEach(projectId => {
+        if (window.allProjects) {
+            const project = window.allProjects.find(p => p.id === projectId);
+            if (project && !project.code.startsWith('ABSENCES')) {
+                if (project.type === 'Evolutivo') {
+                    evolutivosCount++;
+                } else if (project.type === 'Proyecto') {
+                    proyectosCount++;
+                }
+            }
+        }
+    });
+    
+    // Calculate resource utilization (resources assigned >50% and >80%)
+    const resourceUtilization = new Map(); // resourceId -> total hours assigned
+    
+    assignments.forEach(assignment => {
+        if (assignment.resourceId) {
+            const current = resourceUtilization.get(assignment.resourceId) || 0;
+            resourceUtilization.set(assignment.resourceId, current + (parseFloat(assignment.hours) || 0));
+        }
+    });
+    
+    // Get date range to calculate capacity per resource
+    const dateRange = getPeriodDateRange(window.currentPeriod || 'current');
+    const numberOfMonths = dateRange.length;
+    const capacityPerResource = 160 * numberOfMonths; // 160h/month × number of months
+    
+    let resourcesOver50 = 0;
+    let resourcesOver80 = 0;
+    
+    resourceUtilization.forEach((hours, resourceId) => {
+        const utilizationPercent = (hours / capacityPerResource) * 100;
+        if (utilizationPercent > 50) resourcesOver50++;
+        if (utilizationPercent > 80) resourcesOver80++;
     });
     
     // Get resources from API for capacity calculation
@@ -1335,21 +1391,70 @@ async function updateKPIsWithFilteredData(assignments) {
         }
     }
     
-    // Update KPI elements
-    document.getElementById('proyectos-activos').textContent = uniqueProjects.size;
-    document.getElementById('recursos-activos').textContent = uniqueResources.size;
-    document.getElementById('capacidad-total').textContent = formatNumber(totalCapacity);
-    document.getElementById('utilizacion-actual').textContent = formatNumber(Math.round(assignedHours));
+    // Update KPI elements (only if they exist)
+    const proyectosActivosEl = document.getElementById('proyectos-activos');
+    const recursosActivosEl = document.getElementById('recursos-activos');
+    const capacidadTotalEl = document.getElementById('capacidad-total');
+    const horasComprometidasEl = document.getElementById('kpi-horas-comprometidas');
+    const eficienciaEl = document.getElementById('eficiencia');
+    
+    // Main KPI values
+    if (proyectosActivosEl) proyectosActivosEl.textContent = uniqueProjects.size;
+    if (recursosActivosEl) recursosActivosEl.textContent = uniqueResources.size;
+    if (capacidadTotalEl) capacidadTotalEl.textContent = formatNumber(totalCapacity);
+    if (horasComprometidasEl) horasComprometidasEl.textContent = formatNumber(Math.round(assignedHours));
+    
+    // Sub-KPIs for PROYECTOS ACTIVOS
+    const kpiNumEvolutivosEl = document.getElementById('kpi-num-evolutivos');
+    const kpiNumProyectosEl = document.getElementById('kpi-num-proyectos');
+    if (kpiNumEvolutivosEl) kpiNumEvolutivosEl.textContent = evolutivosCount;
+    if (kpiNumProyectosEl) kpiNumProyectosEl.textContent = proyectosCount;
+    
+    // Sub-KPIs for RECURSOS ACTIVOS
+    const kpiAsignados50El = document.getElementById('kpi-asignados-50');
+    const kpiAsignados80El = document.getElementById('kpi-asignados-80');
+    if (kpiAsignados50El) kpiAsignados50El.textContent = resourcesOver50;
+    if (kpiAsignados80El) kpiAsignados80El.textContent = resourcesOver80;
+    
+    // Sub-KPIs for HORAS COMPROMETIDAS
+    const kpiHorasEvolutivosEl = document.getElementById('kpi-horas-evolutivos');
+    const kpiHorasProyectosEl = document.getElementById('kpi-horas-proyectos');
+    if (kpiHorasEvolutivosEl) kpiHorasEvolutivosEl.textContent = formatNumber(Math.round(hoursEvolutivos));
+    if (kpiHorasProyectosEl) kpiHorasProyectosEl.textContent = formatNumber(Math.round(horasProyectos));
+    
+    // Sub-KPIs for CAPACIDAD DISPONIBLE
+    const kpiFtesCapacidadEl = document.getElementById('kpi-ftes-capacidad');
+    if (kpiFtesCapacidadEl) {
+        const dateRange = getPeriodDateRange(window.currentPeriod || 'current');
+        const numberOfMonths = dateRange.length;
+        const ftesCapacidad = (totalCapacity / 160 / numberOfMonths).toFixed(1);
+        kpiFtesCapacidadEl.textContent = `${ftesCapacidad} FTEs`;
+    }
     
     // Calculate efficiency (utilization percentage)
     const efficiency = totalCapacity > 0 ? Math.round((assignedHours / totalCapacity) * 100) : 0;
-    document.getElementById('eficiencia').textContent = `${efficiency}%`;
+    if (eficienciaEl) eficienciaEl.textContent = `${efficiency}%`;
+    
+    // Sub-KPIs for EFICIENCIA
+    const kpiFtesEficienciaEl = document.getElementById('kpi-ftes-eficiencia');
+    if (kpiFtesEficienciaEl) {
+        const dateRange = getPeriodDateRange(window.currentPeriod || 'current');
+        const numberOfMonths = dateRange.length;
+        const ftesEficiencia = (assignedHours / 160 / numberOfMonths).toFixed(1);
+        kpiFtesEficienciaEl.textContent = `${ftesEficiencia} FTEs`;
+    }
     
     console.log('KPIs updated with filtered data:', {
         projects: uniqueProjects.size,
+        evolutivosCount,
+        proyectosCount,
         resources: uniqueResources.size,
+        resourcesOver50,
+        resourcesOver80,
         totalCapacity,
         assignedHours,
+        hoursEvolutivos,
+        horasProyectos,
         efficiency
     });
 }

@@ -18,6 +18,7 @@ function destroyChart(chartId) {
 
 /**
  * Load assignments and resources from API
+ * If a period filter is active, use the filtered assignments
  */
 async function loadAPIData() {
     const awsAccessKey = sessionStorage.getItem('aws_access_key');
@@ -29,6 +30,8 @@ async function loadAPIData() {
     }
     
     try {
+        // ALWAYS load ALL assignments to calculate hours correctly
+        // The period filter should only affect which months are DISPLAYED, not which data is used
         const [assignmentsRes, resourcesRes] = await Promise.all([
             fetch(`${API_CONFIG.BASE_URL}/assignments`, {
                 headers: {
@@ -61,6 +64,8 @@ async function loadAPIData() {
         const teamResourceIds = new Set(resources.map(r => r.id));
         const assignments = allAssignments.filter(a => a.resourceId && teamResourceIds.has(a.resourceId));
         
+        console.log('Overview charts - Loaded ALL assignments:', assignments.length);
+        
         return { assignments, resources };
     } catch (error) {
         console.error('Error loading API data for overview charts:', error);
@@ -82,7 +87,20 @@ export async function initializeOverviewHoursByTypeChart() {
     try {
         const { assignments, resources } = await loadAPIData();
         
-        // Calculate hours by month and category (same as pie chart)
+        // Determine which months to show based on period filter
+        let monthsToShow = monthLabels;
+        let monthIndices = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]; // All 12 months
+        
+        if (window.currentPeriod && window.getPeriodDateRange) {
+            // Get the date range for the selected period (including 'current')
+            const dateRange = window.getPeriodDateRange(window.currentPeriod);
+            if (dateRange.length > 0) {
+                monthIndices = dateRange.map(d => d.month - 1); // Convert to 0-based index
+                monthsToShow = monthIndices.map(i => monthLabels[i]);
+            }
+        }
+        
+        // Calculate hours by month and category
         const currentYear = 2026;
         const hoursByMonthEvolutivo = new Array(12).fill(0);
         const hoursByMonthConceptualizacion = new Array(12).fill(0);
@@ -113,34 +131,41 @@ export async function initializeOverviewHoursByTypeChart() {
             }
         });
         
+        // Filter data to show only selected months
+        const filteredEvolutivo = monthIndices.map(i => hoursByMonthEvolutivo[i]);
+        const filteredConceptualizacion = monthIndices.map(i => hoursByMonthConceptualizacion[i]);
+        const filteredResto = monthIndices.map(i => hoursByMonthResto[i]);
+        
         console.log('Overview Hours by Type Chart - Data:', {
-            hoursByMonthEvolutivo,
-            hoursByMonthConceptualizacion,
-            hoursByMonthResto
+            period: window.currentPeriod || 'current',
+            monthsToShow,
+            hoursByMonthEvolutivo: filteredEvolutivo,
+            hoursByMonthConceptualizacion: filteredConceptualizacion,
+            hoursByMonthResto: filteredResto
         });
         
         overviewChartInstances[chartId] = new Chart(ctx, {
             type: 'bar',
             data: {
-                labels: monthLabels,
+                labels: monthsToShow,
                 datasets: [
                     {
                         label: 'Evolutivos',
-                        data: hoursByMonthEvolutivo,
+                        data: filteredEvolutivo,
                         backgroundColor: 'rgba(100, 181, 246, 0.8)', // Blue - same as pie chart
                         borderColor: '#64b5f6',
                         borderWidth: 1
                     },
                     {
                         label: 'Proyectos - Conceptualización',
-                        data: hoursByMonthConceptualizacion,
+                        data: filteredConceptualizacion,
                         backgroundColor: 'rgba(255, 183, 77, 0.8)', // Orange - same as pie chart
                         borderColor: '#ffb74d',
                         borderWidth: 1
                     },
                     {
                         label: 'Proyectos - Resto',
-                        data: hoursByMonthResto,
+                        data: filteredResto,
                         backgroundColor: 'rgba(77, 182, 172, 0.8)', // Teal - same as pie chart
                         borderColor: '#4db6ac',
                         borderWidth: 1
@@ -205,12 +230,29 @@ export async function initializeOverviewSplitHoursChart() {
     try {
         const { assignments } = await loadAPIData();
         
-        // Calculate hours by category
+        // Determine which months to filter based on period
+        let monthIndices = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]; // All 12 months by default
+        
+        if (window.currentPeriod && window.getPeriodDateRange) {
+            const dateRange = window.getPeriodDateRange(window.currentPeriod);
+            if (dateRange.length > 0) {
+                monthIndices = dateRange.map(d => d.month - 1); // Convert to 0-based index
+            }
+        }
+        
+        // Calculate hours by category (only for selected months)
+        const currentYear = 2026;
         let hoursEvolutivos = 0;
         let horasProyectosConceptualizacion = 0;
         let horasProyectosResto = 0;
         
         assignments.forEach(assignment => {
+            // Filter by year and selected months
+            if (assignment.year !== currentYear || assignment.month < 1 || assignment.month > 12) return;
+            
+            const monthIndex = assignment.month - 1;
+            if (!monthIndices.includes(monthIndex)) return; // Skip if not in selected period
+            
             const hours = parseFloat(assignment.hours) || 0;
             
             // Get project type (exclude ABSENCES projects)
@@ -238,6 +280,8 @@ export async function initializeOverviewSplitHoursChart() {
         const percentResto = total > 0 ? ((horasProyectosResto / total) * 100).toFixed(1) : 0;
         
         console.log('Overview Split Hours Chart - Data:', {
+            period: window.currentPeriod || 'all',
+            monthIndices,
             hoursEvolutivos,
             horasProyectosConceptualizacion,
             horasProyectosResto,

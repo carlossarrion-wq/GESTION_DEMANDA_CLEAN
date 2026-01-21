@@ -234,7 +234,20 @@ async function initializeOverviewCommittedHoursChart() {
         // Usar la MISMA función que usa Gestión de Capacidad
         const { potentialAvailableHours, committedHours } = await calculateCapacityHoursFromResourceCapacity(awsAccessKey, userTeam);
         
+        // Determine which months to show based on period filter
+        let monthsToShow = monthLabels;
+        if (window.currentPeriod && window.getPeriodDateRange) {
+            const dateRange = window.getPeriodDateRange(window.currentPeriod);
+            if (dateRange.length > 0) {
+                const monthIndices = dateRange.map(d => d.month - 1);
+                monthsToShow = monthIndices.map(i => monthLabels[i]);
+                console.log('Filtering months for period:', window.currentPeriod, 'Indices:', monthIndices, 'Labels:', monthsToShow);
+            }
+        }
+        
         console.log('Overview Committed Hours Chart - Using resourceCapacity.js logic:', {
+            period: window.currentPeriod || 'all',
+            monthsToShow,
             committedHours,
             potentialAvailableHours
         });
@@ -242,7 +255,7 @@ async function initializeOverviewCommittedHoursChart() {
         chartInstances[chartId] = new Chart(ctx, {
             type: 'bar',
             data: {
-                labels: monthLabels,
+                labels: monthsToShow,
                 datasets: [
                     {
                         label: 'Horas Comprometidas',

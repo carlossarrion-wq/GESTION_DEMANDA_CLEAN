@@ -99,6 +99,18 @@ async function calculateCapacityHours(awsAccessKey, userTeam) {
     try {
         console.log('Calculating potential available hours...');
         
+        // Check if there's a period filter active (including 'current')
+        const hasPeriodFilter = window.currentPeriod && window.filteredAssignmentsByPeriod;
+        let monthIndices = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]; // All 12 months by default
+        
+        if (hasPeriodFilter && window.getPeriodDateRange) {
+            const dateRange = window.getPeriodDateRange(window.currentPeriod);
+            if (dateRange.length > 0) {
+                monthIndices = dateRange.map(d => d.month - 1); // Convert to 0-based index
+                console.log('Period filter active:', window.currentPeriod, 'Months:', monthIndices);
+            }
+        }
+        
         // Load all resources
         const resourcesResponse = await fetch(`${API_CONFIG.BASE_URL}/resources`, {
             headers: {
@@ -140,7 +152,8 @@ async function calculateCapacityHours(awsAccessKey, userTeam) {
             }
         });
         
-        // Load all assignments to get absences - filter by team using x-user-team header
+        // ALWAYS load ALL assignments to calculate hours correctly
+        // The period filter should only affect which months are DISPLAYED, not which data is used
         const assignmentsResponse = await fetch(`${API_CONFIG.BASE_URL}/assignments`, {
             headers: {
                 'Authorization': awsAccessKey,
@@ -295,6 +308,21 @@ async function calculateCapacityHours(awsAccessKey, userTeam) {
         console.log('Monthly absences:', monthlyAbsences);
         console.log('Monthly committed hours (excluding absences):', monthlyCommittedHours);
         console.log('Potential available hours (base - absences):', potentialAvailableHours);
+        
+        // If period filter is active, return only the filtered months
+        if (hasPeriodFilter) {
+            const filteredPotentialHours = monthIndices.map(i => potentialAvailableHours[i]);
+            const filteredCommittedHours = monthIndices.map(i => monthlyCommittedHours[i]);
+            
+            console.log('Filtered to period months:', monthIndices);
+            console.log('Filtered potential hours:', filteredPotentialHours);
+            console.log('Filtered committed hours:', filteredCommittedHours);
+            
+            return {
+                potentialAvailableHours: filteredPotentialHours,
+                committedHours: filteredCommittedHours
+            };
+        }
         
         return {
             potentialAvailableHours,

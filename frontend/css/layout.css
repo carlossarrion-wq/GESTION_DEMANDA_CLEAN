@@ -84,6 +84,30 @@
     overflow: hidden;
 }
 
+/* Responsive: 2 columnas en tablets */
+@media (max-width: 1200px) {
+    .charts-grid-overview {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+/* Responsive: 1 columna en móviles */
+@media (max-width: 768px) {
+    .charts-grid-overview {
+        grid-template-columns: 1fr;
+    }
+    
+    .kpi-grid-overview {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 480px) {
+    .kpi-grid-overview {
+        grid-template-columns: 1fr;
+    }
+}
+
 /* KPI Card */
 .kpi-card {
     background: var(--bg-card);

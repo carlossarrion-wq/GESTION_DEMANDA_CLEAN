@@ -303,8 +303,8 @@ export function getPeriodDateRange(period) {
             break;
             
         case 'next3':
-            // 3 próximos meses (empezar desde mes siguiente)
-            for (let i = 1; i <= 3; i++) {
+            // 3 meses (empezar desde mes actual)
+            for (let i = 0; i < 3; i++) {
                 const totalMonths = currentMonth + i - 1;
                 const m = (totalMonths % 12) + 1;
                 const y = currentYear + Math.floor(totalMonths / 12);
@@ -313,8 +313,8 @@ export function getPeriodDateRange(period) {
             break;
             
         case 'next6':
-            // 6 próximos meses (empezar desde mes siguiente)
-            for (let i = 1; i <= 6; i++) {
+            // 6 meses (empezar desde mes actual)
+            for (let i = 0; i < 6; i++) {
                 const totalMonths = currentMonth + i - 1;
                 const m = (totalMonths % 12) + 1;
                 const y = currentYear + Math.floor(totalMonths / 12);
@@ -323,8 +323,8 @@ export function getPeriodDateRange(period) {
             break;
             
         case 'next12':
-            // 12 próximos meses (empezar desde mes siguiente)
-            for (let i = 1; i <= 12; i++) {
+            // 12 meses (empezar desde mes actual)
+            for (let i = 0; i < 12; i++) {
                 const totalMonths = currentMonth + i - 1;
                 const m = (totalMonths % 12) + 1;
                 const y = currentYear + Math.floor(totalMonths / 12);
