@@ -248,7 +248,9 @@ async function calculateCapacityHours(awsAccessKey, userTeam) {
             // Exclude ABSENCES projects
             // For committed hours, we only count assignments that have a resourceId (assigned tasks)
             // The team filtering is already done by the backend via x-user-team header
-            if (!projectCode.startsWith('ABSENCES') && assignment.resourceId) {
+            // Check both resourceId (camelCase) and resource_id (snake_case)
+            const hasResource = assignment.resourceId || assignment.resource_id;
+            if (!projectCode.startsWith('ABSENCES') && hasResource) {
                 // Get month and year from assignment
                 let month = assignment.month;
                 let year = assignment.year;

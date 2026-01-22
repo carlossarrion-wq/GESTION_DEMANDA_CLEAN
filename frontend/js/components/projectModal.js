@@ -142,15 +142,18 @@ export function openEditProjectModal(project) {
     document.getElementById('projectPriority').value = mappedPriority;
     
     // Format dates for input[type="date"] (YYYY-MM-DD)
-    if (project.startDate) {
-        const startDate = new Date(project.startDate);
+    // API returns start_date and end_date (snake_case)
+    const startDateValue = project.startDate || project.start_date;
+    if (startDateValue) {
+        const startDate = new Date(startDateValue);
         document.getElementById('projectStartDate').value = startDate.toISOString().split('T')[0];
     } else {
         document.getElementById('projectStartDate').value = '';
     }
     
-    if (project.endDate) {
-        const endDate = new Date(project.endDate);
+    const endDateValue = project.endDate || project.end_date;
+    if (endDateValue) {
+        const endDate = new Date(endDateValue);
         document.getElementById('projectEndDate').value = endDate.toISOString().split('T')[0];
     } else {
         document.getElementById('projectEndDate').value = '';

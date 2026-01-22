@@ -1,19 +1,37 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.disconnectPrisma = exports.prisma = void 0;
-const client_1 = require("@prisma/client");
-exports.prisma = global.prisma || new client_1.PrismaClient({
-    log: process.env.NODE_ENV === 'development'
-        ? ['query', 'error', 'warn']
-        : ['error', 'warn'],
-    errorFormat: 'minimal',
-});
-if (process.env.NODE_ENV !== 'production') {
-    global.prisma = exports.prisma;
+
+// Import PrismaClient from the generated client in the layer
+const { PrismaClient } = require("@prisma/client");
+
+// Create singleton instance
+let prismaInstance = null;
+
+function getPrismaInstance() {
+    if (!prismaInstance) {
+        console.log('Creating new PrismaClient instance');
+        prismaInstance = new PrismaClient({
+            log: process.env.NODE_ENV === 'development'
+                ? ['query', 'error', 'warn']
+                : ['error', 'warn'],
+            errorFormat: 'minimal',
+        });
+        
+        // Verify the instance has the expected models
+        console.log('PrismaClient models:', Object.keys(prismaInstance).filter(k => !k.startsWith('_') && !k.startsWith('$')));
+    }
+    return prismaInstance;
 }
+
+exports.prisma = getPrismaInstance();
+
 const disconnectPrisma = async () => {
-    await exports.prisma.$disconnect();
+    if (prismaInstance) {
+        await prismaInstance.$disconnect();
+        prismaInstance = null;
+    }
 };
+
 exports.disconnectPrisma = disconnectPrisma;
 exports.default = exports.prisma;
-//# sourceMappingURL=prisma.js.map

@@ -27,29 +27,32 @@ class AssignmentsManager {
     }
 
     /**
-     * Get all assignments
-     * @returns {Array}
+     * Calculate monthly hours for matrix table
+     * @param {number} year - Year to filter (default 2026)
+     * @returns {Map} Map of projectId -> array of 12 monthly hours
      */
-    getAssignments() {
-        return this.assignments;
-    }
+    calculateMonthlyHoursByProject(year = 2026) {
+        const projectMonthHours = new Map();
 
-    /**
-     * Get assignments for a specific project
-     * @param {string|number} projectId
-     * @returns {Array}
-     */
-    getProjectAssignments(projectId) {
-        return this.assignments.filter(a => a.projectId === projectId);
-    }
+        this.assignments.forEach(assignment => {
+            // Map snake_case to camelCase
+            const projectId = assignment.project_id || assignment.projectId;
+            
+            if (!projectId || assignment.year !== year) {
+                return;
+            }
 
-    /**
-     * Get assignments for a specific resource
-     * @param {string|number} resourceId
-     * @returns {Array}
-     */
-    getResourceAssignments(resourceId) {
-        return this.assignments.filter(a => a.resourceId === resourceId);
+            if (!projectMonthHours.has(projectId)) {
+                projectMonthHours.set(projectId, new Array(12).fill(0));
+            }
+
+            const monthIndex = assignment.month - 1; // Convert 1-12 to 0-11
+            const hours = parseFloat(assignment.hours) || 0;
+            const monthlyHours = projectMonthHours.get(projectId);
+            monthlyHours[monthIndex] += hours;
+        });
+        
+        return projectMonthHours;
     }
 
     /**
@@ -98,31 +101,6 @@ class AssignmentsManager {
         });
 
         return hoursByResource;
-    }
-
-    /**
-     * Calculate monthly hours for matrix table
-     * @param {number} year - Year to filter (default 2026)
-     * @returns {Map} Map of projectId -> array of 12 monthly hours
-     */
-    calculateMonthlyHoursByProject(year = 2026) {
-        const projectMonthHours = new Map();
-
-        this.assignments.forEach(assignment => {
-            const projectId = assignment.projectId;
-            if (!projectId || assignment.year !== year) return;
-
-            if (!projectMonthHours.has(projectId)) {
-                projectMonthHours.set(projectId, new Array(12).fill(0));
-            }
-
-            const monthIndex = assignment.month - 1; // Convert 1-12 to 0-11
-            const hours = parseFloat(assignment.hours) || 0;
-            const monthlyHours = projectMonthHours.get(projectId);
-            monthlyHours[monthIndex] += hours;
-        });
-
-        return projectMonthHours;
     }
 
     /**

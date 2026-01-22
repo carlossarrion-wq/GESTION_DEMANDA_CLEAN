@@ -1,0 +1,9 @@
+{
+  "name": "capacity-handler",
+  "version": "1.0.0",
+  "description": "Lambda handler for capacity",
+  "main": "capacityHandler.js",
+  "dependencies": {
+    "pg": "^8.11.3"
+  }
+}

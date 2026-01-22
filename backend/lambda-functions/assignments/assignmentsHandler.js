@@ -1,25 +1,28 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.handler = void 0;
-const prisma_1 = require("../lib/prisma");
-const response_1 = require("../lib/response");
-const errors_1 = require("../lib/errors");
-const validators_1 = require("../lib/validators");
+
+const { query } = require("./lib/db");
+const response_1 = require("./lib/response");
+const errors_1 = require("./lib/errors");
+const validators_1 = require("./lib/validators");
+
 const handler = async (event) => {
     const method = event.httpMethod;
     const pathParameters = event.pathParameters || {};
     const assignmentId = pathParameters.id;
     const userTeam = event.headers['x-user-team'] || event.headers['X-User-Team'];
+    
     try {
         if (method === 'OPTIONS') {
             return (0, response_1.optionsResponse)();
         }
+        
         switch (method) {
             case 'GET':
                 if (assignmentId) {
                     return await getAssignmentById(assignmentId);
-                }
-                else {
+                } else {
                     return await listAssignments(event.queryStringParameters || {}, userTeam);
                 }
             case 'POST':
@@ -32,318 +35,397 @@ const handler = async (event) => {
             case 'DELETE':
                 if (assignmentId) {
                     return await deleteAssignment(assignmentId);
-                }
-                else if (event.queryStringParameters?.projectId) {
+                } else if (event.queryStringParameters?.projectId) {
                     return await deleteProjectAssignments(event.queryStringParameters.projectId);
-                }
-                else {
+                } else {
                     return (0, response_1.errorResponse)('Assignment ID or projectId query parameter is required for delete', 400);
                 }
             default:
                 return (0, response_1.errorResponse)(`Method ${method} not allowed`, 405);
         }
-    }
-    catch (error) {
+    } catch (error) {
         console.error('Error in assignmentsHandler:', error);
         const { statusCode, message } = (0, errors_1.handleError)(error);
         return (0, response_1.errorResponse)(message, statusCode, error);
     }
 };
+
 exports.handler = handler;
+
 async function listAssignments(queryParams, userTeam) {
     const { projectId, resourceId, month, year, skillName } = queryParams;
-    const where = {
-        ...(projectId && { projectId }),
-        ...(resourceId && { resourceId }),
-        ...(month && { month: parseInt(month, 10) }),
-        ...(year && { year: parseInt(year, 10) }),
-        ...(skillName && { skillName }),
-    };
-    if (userTeam) {
-        where.resource = {
-            team: userTeam,
-        };
+    
+    let sql = `
+        SELECT 
+            a.*,
+            json_build_object(
+                'id', p.id,
+                'code', p.code,
+                'title', p.title,
+                'type', p.type,
+                'priority', p.priority,
+                'status', p.status
+            ) as project,
+            json_build_object(
+                'id', r.id,
+                'code', r.code,
+                'name', r.name,
+                'email', r.email,
+                'active', r.active
+            ) as resource
+        FROM assignments a
+        LEFT JOIN projects p ON a.project_id = p.id
+        LEFT JOIN resources r ON a.resource_id = r.id
+        WHERE 1=1
+    `;
+    
+    const params = [];
+    let paramIndex = 1;
+    
+    if (projectId) {
+        sql += ` AND a.project_id = $${paramIndex++}`;
+        params.push(projectId);
     }
-    const assignments = await prisma_1.prisma.assignment.findMany({
-        where,
-        include: {
-            project: {
-                select: {
-                    id: true,
-                    code: true,
-                    title: true,
-                    type: true,
-                    priority: true,
-                    status: true,
-                },
-            },
-            resource: {
-                select: {
-                    id: true,
-                    code: true,
-                    name: true,
-                    email: true,
-                    active: true,
-                },
-            },
-        },
-        orderBy: [
-            { year: 'desc' },
-            { month: 'desc' },
-        ],
-    });
+    
+    if (resourceId) {
+        sql += ` AND a.resource_id = $${paramIndex++}`;
+        params.push(resourceId);
+    }
+    
+    if (month) {
+        sql += ` AND a.month = $${paramIndex++}`;
+        params.push(parseInt(month, 10));
+    }
+    
+    if (year) {
+        sql += ` AND a.year = $${paramIndex++}`;
+        params.push(parseInt(year, 10));
+    }
+    
+    if (skillName) {
+        sql += ` AND a."skillName" = $${paramIndex++}`;
+        params.push(skillName);
+    }
+    
+    if (userTeam) {
+        sql += ` AND r.team = $${paramIndex++}`;
+        params.push(userTeam);
+    }
+    
+    sql += ` ORDER BY a.year DESC, a.month DESC`;
+    
+    const result = await query(sql, params);
+    
     return (0, response_1.successResponse)({
-        assignments,
-        count: assignments.length,
+        assignments: result.rows,
+        count: result.rows.length
     });
 }
+
 async function getAssignmentById(assignmentId) {
     try {
         (0, validators_1.validateUUID)(assignmentId, 'assignmentId');
-    }
-    catch (error) {
+    } catch (error) {
         if (error instanceof errors_1.ValidationError) {
             return (0, response_1.errorResponse)(error.message, 400);
         }
         throw error;
     }
-    const assignment = await prisma_1.prisma.assignment.findUnique({
-        where: { id: assignmentId },
-        include: {
-            project: true,
-            resource: {
-                include: {
-                    resourceSkills: true,
-                },
-            },
-        },
-    });
-    if (!assignment) {
+    
+    const sql = `
+        SELECT 
+            a.*,
+            row_to_json(p.*) as project,
+            row_to_json(r.*) as resource
+        FROM assignments a
+        LEFT JOIN projects p ON a.project_id = p.id
+        LEFT JOIN resources r ON a.resource_id = r.id
+        WHERE a.id = $1
+    `;
+    
+    const result = await query(sql, [assignmentId]);
+    
+    if (result.rows.length === 0) {
         throw new errors_1.NotFoundError('Assignment', assignmentId);
     }
-    return (0, response_1.successResponse)(assignment);
+    
+    return (0, response_1.successResponse)(result.rows[0]);
 }
+
 async function createAssignment(body) {
     if (!body) {
         return (0, response_1.errorResponse)('Request body is required', 400);
     }
+    
     const data = JSON.parse(body);
+    
+    // Validations
     if (!data.projectId) {
         return (0, response_1.errorResponse)('projectId is required', 400);
     }
     if (!data.title) {
         return (0, response_1.errorResponse)('title is required', 400);
     }
+    
     const hasDate = !!data.date;
     const hasMonthYear = data.month && data.year;
+    
     if (!hasDate && !hasMonthYear) {
         return (0, response_1.errorResponse)('Either date or (month and year) is required', 400);
     }
+    
     if (!data.hours || data.hours <= 0) {
         return (0, response_1.errorResponse)('hours must be greater than 0', 400);
     }
-    const project = await prisma_1.prisma.project.findUnique({
-        where: { id: data.projectId },
-    });
-    if (!project) {
+    
+    // Check if project exists
+    const projectCheck = await query('SELECT id FROM projects WHERE id = $1', [data.projectId]);
+    if (projectCheck.rows.length === 0) {
         return (0, response_1.errorResponse)(`Project with ID '${data.projectId}' not found`, 404);
     }
-    let resource = null;
+    
+    // If resourceId provided, validate and check capacity
     if (data.resourceId) {
-        resource = await prisma_1.prisma.resource.findUnique({
-            where: { id: data.resourceId },
-            include: {
-                resourceSkills: true,
-            },
-        });
-        if (!resource) {
+        const resourceCheck = await query(
+            'SELECT id, name, active, default_capacity FROM resources WHERE id = $1',
+            [data.resourceId]
+        );
+        
+        if (resourceCheck.rows.length === 0) {
             return (0, response_1.errorResponse)(`Resource with ID '${data.resourceId}' not found`, 404);
         }
+        
+        const resource = resourceCheck.rows[0];
+        
         if (!resource.active) {
             return (0, response_1.errorResponse)('Cannot assign inactive resource to project', 400);
         }
-        if (data.skillName) {
-            const hasSkill = resource.resourceSkills.some((rs) => rs.skillName === data.skillName);
-            if (!hasSkill) {
-                throw new errors_1.BusinessRuleError(`Resource '${resource.name}' does not have the skill '${data.skillName}'`, 'RESOURCE_SKILL_MISMATCH');
-            }
-        }
+        
+        // Capacity validation for date-based assignments
         if (hasDate) {
             const assignmentDate = new Date(data.date);
-            const existingDailyAssignments = await prisma_1.prisma.assignment.findMany({
-                where: {
-                    resourceId: data.resourceId,
-                    date: assignmentDate,
-                    projectId: {
-                        not: data.projectId,
-                    },
-                },
-            });
-            const assignedHoursToday = existingDailyAssignments.reduce((sum, assignment) => sum + Number(assignment.hours), 0);
-            const dailyCapacity = 8;
+            
+            // Get existing assignments for this resource on this date (excluding current project)
+            const existingAssignments = await query(
+                `SELECT COALESCE(SUM(hours), 0) as total_hours 
+                 FROM assignments 
+                 WHERE resource_id = $1 
+                 AND date = $2 
+                 AND project_id != $3`,
+                [data.resourceId, assignmentDate, data.projectId]
+            );
+            
+            const assignedHoursToday = parseFloat(existingAssignments.rows[0].total_hours);
+            
+            // Get absences for this resource on this date (commented out - table doesn't exist yet)
+            // const absences = await query(
+            //     `SELECT COALESCE(SUM(hours_per_day), 0) as absence_hours
+            //      FROM absences
+            //      WHERE resource_id = $1
+            //      AND start_date <= $2
+            //      AND end_date >= $2`,
+            //     [data.resourceId, assignmentDate]
+            // );
+            
+            const absenceHoursToday = 0; // parseFloat(absences.rows[0].absence_hours);
+            
+            // Calculate daily capacity: (monthly capacity / 20 working days) - absences
+            const baseDailyCapacity = Math.floor(resource.default_capacity / 20);
+            const dailyCapacity = baseDailyCapacity - absenceHoursToday;
+            
             if (assignedHoursToday + data.hours > dailyCapacity) {
-                throw new errors_1.BusinessRuleError(`Assignment would exceed daily resource capacity for ${assignmentDate.toISOString().split('T')[0]}. Available: ${dailyCapacity - assignedHoursToday} hours, Requested: ${data.hours} hours, Assigned: ${assignedHoursToday} hours`, 'DAILY_CAPACITY_EXCEEDED');
+                throw new errors_1.BusinessRuleError(
+                    `Assignment would exceed daily resource capacity for ${assignmentDate.toISOString().split('T')[0]}. Available: ${dailyCapacity - assignedHoursToday} hours, Requested: ${data.hours} hours, Assigned: ${assignedHoursToday} hours, Absences: ${absenceHoursToday} hours`,
+                    'DAILY_CAPACITY_EXCEEDED'
+                );
             }
         }
     }
-    const assignment = await prisma_1.prisma.assignment.create({
-        data: {
-            projectId: data.projectId,
-            resourceId: data.resourceId || null,
-            title: data.title,
-            description: data.description || null,
-            skillName: data.skillName || null,
-            team: data.team || null,
-            ...(hasDate && { date: new Date(data.date) }),
-            ...(hasMonthYear && { month: data.month, year: data.year }),
-            hours: data.hours,
-        },
-        include: {
-            project: {
-                select: {
-                    id: true,
-                    code: true,
-                    title: true,
-                },
-            },
-            resource: {
-                select: {
-                    id: true,
-                    code: true,
-                    name: true,
-                },
-            },
-        },
-    });
-    return (0, response_1.createdResponse)(assignment);
+    
+    // Extract month and year from date if provided
+    let month = null;
+    let year = null;
+    let dateObj = null;
+    
+    if (hasDate) {
+        dateObj = new Date(data.date);
+        month = dateObj.getMonth() + 1; // getMonth() returns 0-11, we need 1-12
+        year = dateObj.getFullYear();
+    } else if (hasMonthYear) {
+        month = data.month;
+        year = data.year;
+    }
+    
+    // Insert assignment
+    const insertSql = `
+        INSERT INTO assignments (
+            project_id, resource_id, title, description, skill_name, team,
+            date, month, year, hours
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        RETURNING *
+    `;
+    
+    const insertParams = [
+        data.projectId,
+        data.resourceId || null,
+        data.title,
+        data.description || null,
+        data.skillName || null,
+        data.team || null,
+        dateObj,
+        month,
+        year,
+        data.hours
+    ];
+    
+    const result = await query(insertSql, insertParams);
+    const assignment = result.rows[0];
+    
+    // Get related project and resource info
+    const detailsSql = `
+        SELECT 
+            a.*,
+            json_build_object('id', p.id, 'code', p.code, 'title', p.title) as project,
+            json_build_object('id', r.id, 'code', r.code, 'name', r.name) as resource
+        FROM assignments a
+        LEFT JOIN projects p ON a.project_id = p.id
+        LEFT JOIN resources r ON a.resource_id = r.id
+        WHERE a.id = $1
+    `;
+    
+    const detailsResult = await query(detailsSql, [assignment.id]);
+    
+    return (0, response_1.createdResponse)(detailsResult.rows[0]);
 }
+
 async function updateAssignment(assignmentId, body) {
     try {
         (0, validators_1.validateUUID)(assignmentId, 'assignmentId');
-    }
-    catch (error) {
+    } catch (error) {
         if (error instanceof errors_1.ValidationError) {
             return (0, response_1.errorResponse)(error.message, 400);
         }
         throw error;
     }
+    
     if (!body) {
         return (0, response_1.errorResponse)('Request body is required', 400);
     }
+    
     const data = JSON.parse(body);
-    const existingAssignment = await prisma_1.prisma.assignment.findUnique({
-        where: { id: assignmentId },
-    });
-    if (!existingAssignment) {
+    
+    // Check if assignment exists
+    const existingResult = await query('SELECT * FROM assignments WHERE id = $1', [assignmentId]);
+    if (existingResult.rows.length === 0) {
         throw new errors_1.NotFoundError('Assignment', assignmentId);
     }
-    if (data.resourceId) {
-        const resource = await prisma_1.prisma.resource.findUnique({
-            where: { id: data.resourceId },
-            include: {
-                resourceSkills: true,
-            },
-        });
-        if (!resource) {
-            return (0, response_1.errorResponse)(`Resource with ID '${data.resourceId}' not found`, 404);
-        }
-        if (!resource.active) {
-            return (0, response_1.errorResponse)('Cannot assign inactive resource to project', 400);
-        }
-        if (data.skillName) {
-            const hasSkill = resource.resourceSkills.some((rs) => rs.skillName === data.skillName);
-            if (!hasSkill) {
-                throw new errors_1.BusinessRuleError(`Resource '${resource.name}' does not have the skill '${data.skillName}'`, 'RESOURCE_SKILL_MISMATCH');
-            }
-        }
-        const hoursToUpdate = data.hours || existingAssignment.hours;
-        const resourceIdToCheck = data.resourceId || existingAssignment.resourceId;
-        if (resourceIdToCheck && hoursToUpdate) {
-            if (existingAssignment.date || data.date) {
-                const assignmentDate = data.date ? new Date(data.date) : existingAssignment.date;
-                if (assignmentDate) {
-                    const existingDailyAssignments = await prisma_1.prisma.assignment.findMany({
-                        where: {
-                            resourceId: resourceIdToCheck,
-                            date: assignmentDate,
-                            id: {
-                                not: assignmentId,
-                            },
-                        },
-                    });
-                    const assignedHoursToday = existingDailyAssignments.reduce((sum, assignment) => sum + Number(assignment.hours), 0);
-                    const dailyCapacity = 8;
-                    if (assignedHoursToday + hoursToUpdate > dailyCapacity) {
-                        throw new errors_1.BusinessRuleError(`Assignment would exceed daily resource capacity for ${assignmentDate.toISOString().split('T')[0]}. Available: ${dailyCapacity - assignedHoursToday} hours, Requested: ${hoursToUpdate} hours, Assigned: ${assignedHoursToday} hours`, 'DAILY_CAPACITY_EXCEEDED');
-                    }
-                }
-            }
-        }
+    
+    const existing = existingResult.rows[0];
+    
+    // Build update query dynamically
+    const updates = [];
+    const params = [];
+    let paramIndex = 1;
+    
+    if (data.title) {
+        updates.push(`title = $${paramIndex++}`);
+        params.push(data.title);
     }
-    const updatedAssignment = await prisma_1.prisma.assignment.update({
-        where: { id: assignmentId },
-        data: {
-            ...(data.title && { title: data.title }),
-            ...(data.description !== undefined && { description: data.description }),
-            ...(data.skillName !== undefined && { skillName: data.skillName }),
-            ...(data.month && { month: data.month }),
-            ...(data.year && { year: data.year }),
-            ...(data.hours && { hours: data.hours }),
-            ...(data.resourceId !== undefined && { resourceId: data.resourceId }),
-        },
-        include: {
-            project: {
-                select: {
-                    id: true,
-                    code: true,
-                    title: true,
-                },
-            },
-            resource: {
-                select: {
-                    id: true,
-                    code: true,
-                    name: true,
-                },
-            },
-        },
-    });
-    return (0, response_1.successResponse)(updatedAssignment);
+    if (data.description !== undefined) {
+        updates.push(`description = $${paramIndex++}`);
+        params.push(data.description);
+    }
+    if (data.skillName !== undefined) {
+        updates.push(`skill_name = $${paramIndex++}`);
+        params.push(data.skillName);
+    }
+    if (data.month) {
+        updates.push(`month = $${paramIndex++}`);
+        params.push(data.month);
+    }
+    if (data.year) {
+        updates.push(`year = $${paramIndex++}`);
+        params.push(data.year);
+    }
+    if (data.hours) {
+        updates.push(`hours = $${paramIndex++}`);
+        params.push(data.hours);
+    }
+    if (data.resourceId !== undefined) {
+        updates.push(`resource_id = $${paramIndex++}`);
+        params.push(data.resourceId);
+    }
+    
+    if (updates.length === 0) {
+        return (0, response_1.errorResponse)('No fields to update', 400);
+    }
+    
+    params.push(assignmentId);
+    const updateSql = `
+        UPDATE assignments
+        SET ${updates.join(', ')}
+        WHERE id = $${paramIndex}
+        RETURNING *
+    `;
+    
+    const result = await query(updateSql, params);
+    
+    // Get related info
+    const detailsSql = `
+        SELECT 
+            a.*,
+            json_build_object('id', p.id, 'code', p.code, 'title', p.title) as project,
+            json_build_object('id', r.id, 'code', r.code, 'name', r.name) as resource
+        FROM assignments a
+        LEFT JOIN projects p ON a.project_id = p.id
+        LEFT JOIN resources r ON a.resource_id = r.id
+        WHERE a.id = $1
+    `;
+    
+    const detailsResult = await query(detailsSql, [assignmentId]);
+    
+    return (0, response_1.successResponse)(detailsResult.rows[0]);
 }
+
 async function deleteProjectAssignments(projectId) {
     console.log('Deleting all assignments for project:', projectId);
-    const count = await prisma_1.prisma.assignment.count({
-        where: { projectId },
-    });
-    console.log('Found', count, 'assignments to delete');
-    const result = await prisma_1.prisma.assignment.deleteMany({
-        where: { projectId },
-    });
-    console.log('Deleted', result.count, 'assignments');
+    
+    const countResult = await query(
+        'SELECT COUNT(*) as count FROM assignments WHERE project_id = $1',
+        [projectId]
+    );
+    
+    console.log('Found', countResult.rows[0].count, 'assignments to delete');
+    
+    const deleteResult = await query(
+        'DELETE FROM assignments WHERE project_id = $1',
+        [projectId]
+    );
+    
+    console.log('Deleted', deleteResult.rowCount, 'assignments');
+    
     return (0, response_1.successResponse)({
-        message: `Deleted ${result.count} assignments from project`,
-        deletedCount: result.count,
+        message: `Deleted ${deleteResult.rowCount} assignments from project`,
+        deletedCount: deleteResult.rowCount
     });
 }
+
 async function deleteAssignment(assignmentId) {
     try {
         (0, validators_1.validateUUID)(assignmentId, 'assignmentId');
-    }
-    catch (error) {
+    } catch (error) {
         if (error instanceof errors_1.ValidationError) {
             return (0, response_1.errorResponse)(error.message, 400);
         }
         throw error;
     }
-    const existingAssignment = await prisma_1.prisma.assignment.findUnique({
-        where: { id: assignmentId },
-    });
-    if (!existingAssignment) {
+    
+    const existingResult = await query('SELECT id FROM assignments WHERE id = $1', [assignmentId]);
+    if (existingResult.rows.length === 0) {
         throw new errors_1.NotFoundError('Assignment', assignmentId);
     }
-    await prisma_1.prisma.assignment.delete({
-        where: { id: assignmentId },
-    });
+    
+    await query('DELETE FROM assignments WHERE id = $1', [assignmentId]);
+    
     return (0, response_1.noContentResponse)();
 }
-//# sourceMappingURL=assignmentsHandler.js.map

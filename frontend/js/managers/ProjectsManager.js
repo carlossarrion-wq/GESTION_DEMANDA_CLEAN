@@ -121,18 +121,41 @@ class ProjectsManager {
     }
 
     /**
-     * Calculate conceptualization hours for all projects
-     * @returns {Promise<Map>} Map of projectId -> total hours
+     * Calculate hours for all projects
+     * Returns both committed hours (from assignments) and estimated hours (from concept_tasks)
+     * @returns {Promise<Object>} Object with committedHoursMap and estimatedHoursMap
      */
-    async calculateConceptualizationHours() {
-        const totalHoursMap = new Map();
+    async calculateProjectHours() {
+        const committedHoursMap = new Map();
+        const estimatedHoursMap = new Map();
         
         try {
+            // Get assignments for committed hours
+            const assignments = await apiService.getAssignments();
+            
+            // Calculate committed hours per project from assignments
+            assignments.forEach(assignment => {
+                const projectId = assignment.projectId || assignment.project_id;
+                
+                if (!projectId) {
+                    return;
+                }
+                
+                const hours = parseFloat(assignment.hours) || 0;
+                
+                if (!committedHoursMap.has(projectId)) {
+                    committedHoursMap.set(projectId, 0);
+                }
+                
+                committedHoursMap.set(projectId, committedHoursMap.get(projectId) + hours);
+            });
+            
+            // Get concept tasks for estimated hours
             const conceptTasks = await apiService.getConceptTasks();
             
-            // Calculate total hours per project
+            // Calculate estimated hours per project from concept_tasks
             conceptTasks.forEach(task => {
-                const projectId = task.projectId;
+                const projectId = task.projectId || task.project_id;
                 
                 if (!projectId) {
                     return;
@@ -140,23 +163,25 @@ class ProjectsManager {
                 
                 const hours = parseFloat(task.hours) || 0;
                 
-                if (!totalHoursMap.has(projectId)) {
-                    totalHoursMap.set(projectId, 0);
+                if (!estimatedHoursMap.has(projectId)) {
+                    estimatedHoursMap.set(projectId, 0);
                 }
                 
-                totalHoursMap.set(projectId, totalHoursMap.get(projectId) + hours);
+                estimatedHoursMap.set(projectId, estimatedHoursMap.get(projectId) + hours);
             });
             
-            console.log('Conceptualization hours calculated:', {
-                projectsWithHours: totalHoursMap.size,
+            console.log('Project hours calculated:', {
+                projectsWithCommittedHours: committedHoursMap.size,
+                projectsWithEstimatedHours: estimatedHoursMap.size,
                 totalProjects: this.projects.length,
-                totalTasks: conceptTasks.length
+                totalAssignments: assignments.length,
+                totalConceptTasks: conceptTasks.length
             });
             
-            return totalHoursMap;
+            return { committedHoursMap, estimatedHoursMap };
         } catch (error) {
-            console.error('Error calculating conceptualization hours:', error);
-            return totalHoursMap;
+            console.error('Error calculating project hours:', error);
+            return { committedHoursMap, estimatedHoursMap };
         }
     }
 
@@ -172,12 +197,21 @@ class ProjectsManager {
             // Group assignments by resource, skill/team (activity) and month
             const resourceSkillHoursMap = new Map();
             
+            // Load resources to get names
+            const resources = await apiService.getResources();
+            const resourcesMap = new Map();
+            resources.forEach(r => resourcesMap.set(r.id, r));
+            
             assignments.forEach(assignment => {
-                if (!assignment.resourceId || !assignment.resource) return;
+                // Map snake_case to camelCase
+                const resourceId = assignment.resource_id || assignment.resourceId;
+                if (!resourceId) return;
                 
-                const resourceId = assignment.resourceId;
-                const resourceName = assignment.resource.name || 'Sin nombre';
-                const skill = assignment.team || assignment.skillName || 'General';
+                // Get resource name from resources map
+                const resource = resourcesMap.get(resourceId);
+                const resourceName = resource?.name || 'Sin nombre';
+                
+                const skill = assignment.team || assignment.skill_name || assignment.skillName || 'General';
                 const hours = parseFloat(assignment.hours) || 0;
                 const month = assignment.month; // 1-12
                 

@@ -30,28 +30,95 @@ export async function initializeEffortTrackingTable() {
         // Calculate metrics for each project
         const projectMetrics = filteredProjects.map(project => {
             // Get all assignments for this project
-            const projectAssignments = assignments.filter(a => a.projectId === project.id);
+            const projectAssignments = assignments.filter(a => {
+                const assignmentProjectId = a.projectId || a.project_id;
+                return assignmentProjectId === project.id;
+            });
+            
+            console.log(`Project ${project.code} (ID: ${project.id}):`, {
+                assignmentsFound: projectAssignments.length,
+                sampleAssignment: projectAssignments[0]
+            });
             
             // Calculate ITD (Inception To Date) - hours from start until today
             const itd = projectAssignments
                 .filter(a => {
                     const assignmentDate = new Date(a.year, a.month - 1, 1);
-                    return assignmentDate <= today;
+                    const assignmentEndOfMonth = new Date(a.year, a.month, 0); // Last day of the month
+                    
+                    // If assignment month is before current month, count all hours
+                    if (assignmentDate < new Date(today.getFullYear(), today.getMonth(), 1)) {
+                        return true;
+                    }
+                    
+                    // If assignment month is current month, only count if we're past the first day
+                    if (assignmentDate.getFullYear() === today.getFullYear() && 
+                        assignmentDate.getMonth() === today.getMonth()) {
+                        // We're in the current month, so this is ITD (days already passed)
+                        return true;
+                    }
+                    
+                    // Future months are not ITD
+                    return false;
                 })
-                .reduce((sum, a) => sum + (parseFloat(a.hours) || 0), 0);
+                .reduce((sum, a) => {
+                    const assignmentDate = new Date(a.year, a.month - 1, 1);
+                    const hours = parseFloat(a.hours) || 0;
+                    
+                    // If it's the current month, prorate based on days passed
+                    if (assignmentDate.getFullYear() === today.getFullYear() && 
+                        assignmentDate.getMonth() === today.getMonth()) {
+                        const daysInMonth = new Date(a.year, a.month, 0).getDate();
+                        const daysPassed = today.getDate();
+                        const proratedHours = Math.round((hours / daysInMonth) * daysPassed);
+                        return sum + proratedHours;
+                    }
+                    
+                    // For past months, count all hours
+                    return sum + hours;
+                }, 0);
             
             // Calculate ETC (Estimate To Complete) - hours from tomorrow onwards
             const etc = projectAssignments
                 .filter(a => {
                     const assignmentDate = new Date(a.year, a.month - 1, 1);
-                    return assignmentDate > today;
+                    
+                    // If assignment month is after current month, count all hours
+                    if (assignmentDate > new Date(today.getFullYear(), today.getMonth(), 1)) {
+                        return true;
+                    }
+                    
+                    // If assignment month is current month, count remaining days
+                    if (assignmentDate.getFullYear() === today.getFullYear() && 
+                        assignmentDate.getMonth() === today.getMonth()) {
+                        return true;
+                    }
+                    
+                    // Past months are not ETC
+                    return false;
                 })
-                .reduce((sum, a) => sum + (parseFloat(a.hours) || 0), 0);
+                .reduce((sum, a) => {
+                    const assignmentDate = new Date(a.year, a.month - 1, 1);
+                    const hours = parseFloat(a.hours) || 0;
+                    
+                    // If it's the current month, prorate based on days remaining
+                    if (assignmentDate.getFullYear() === today.getFullYear() && 
+                        assignmentDate.getMonth() === today.getMonth()) {
+                        const daysInMonth = new Date(a.year, a.month, 0).getDate();
+                        const daysPassed = today.getDate();
+                        const daysRemaining = daysInMonth - daysPassed;
+                        const proratedHours = Math.round((hours / daysInMonth) * daysRemaining);
+                        return sum + proratedHours;
+                    }
+                    
+                    // For future months, count all hours
+                    return sum + hours;
+                }, 0);
             
             // Calculate EAC (Estimate At Completion) - ITD + ETC
             const eac = itd + etc;
             
-            // Get initial estimate from concept tasks (sum of hours from concept-tasks table)
+            // Get initial estimate from concept_tasks (estimación inicial del proyecto)
             const initialEstimate = conceptHoursMap.get(project.id) || 0;
             
             // Calculate deviation
@@ -185,20 +252,20 @@ function updatePaginationControls(totalItems, totalPages) {
     const endIndex = Math.min(currentPage * itemsPerPage, totalItems);
     
     // Update info text
-    const infoElement = document.getElementById('effort-tracking-info');
+    const infoElement = document.getElementById('effort-info-text');
     if (infoElement) {
         infoElement.textContent = `Showing ${startIndex}-${endIndex} of ${totalItems} projects`;
     }
     
     // Update page info
-    const pageInfoElement = document.getElementById('effort-page-info');
+    const pageInfoElement = document.getElementById('effort-current-page');
     if (pageInfoElement) {
         pageInfoElement.textContent = `Page ${currentPage} of ${totalPages}`;
     }
     
     // Update button states
-    const prevButton = document.getElementById('prev-effort-btn');
-    const nextButton = document.getElementById('next-effort-btn');
+    const prevButton = document.getElementById('effort-prev-btn');
+    const nextButton = document.getElementById('effort-next-btn');
     
     if (prevButton) {
         prevButton.disabled = currentPage === 1;
@@ -232,7 +299,7 @@ export function loadNextEffortPage() {
  * Initialize search functionality
  */
 function initializeSearch() {
-    const searchInput = document.getElementById('effort-tracking-search');
+    const searchInput = document.getElementById('effort-search-input');
     if (!searchInput) return;
     
     searchInput.addEventListener('input', function(e) {
@@ -307,17 +374,47 @@ async function loadEffortData() {
         const allAssignments = assignmentsData.data?.assignments || assignmentsData.assignments || [];
         const conceptTasks = conceptTasksData.data?.tasks || conceptTasksData.tasks || [];
         
+        console.log('Raw data loaded:', {
+            totalProjects: projects.length,
+            totalAssignments: allAssignments.length,
+            totalConceptTasks: conceptTasks.length,
+            userTeam
+        });
+        
         // Filter projects by team
         const teamProjects = projects.filter(p => p.team === userTeam);
         
         // Filter assignments by team projects
         const projectIds = new Set(teamProjects.map(p => p.id));
-        const assignments = allAssignments.filter(a => projectIds.has(a.projectId));
+        const assignments = allAssignments.filter(a => {
+            const projectId = a.projectId || a.project_id;
+            return projectIds.has(projectId);
+        });
+        
+        console.log('After filtering:', {
+            teamProjects: teamProjects.length,
+            projectIds: projectIds.size,
+            filteredAssignments: assignments.length
+        });
         
         // Calculate concept hours map (sum of hours from concept tasks per project)
         const conceptHoursMap = new Map();
+        
+        console.log('Building conceptHoursMap from concept tasks:', {
+            totalConceptTasks: conceptTasks.length,
+            sampleTask: conceptTasks[0]
+        });
+        
         conceptTasks.forEach(task => {
-            const projectId = task.projectId;
+            const projectId = task.projectId || task.project_id;
+            
+            console.log('Processing concept task:', {
+                taskId: task.id,
+                projectId: projectId,
+                hours: task.hours,
+                isInProjectIds: projectIds.has(projectId)
+            });
+            
             if (!projectId || !projectIds.has(projectId)) return;
             
             const hours = parseFloat(task.hours) || 0;
@@ -327,6 +424,11 @@ async function loadEffortData() {
             }
             
             conceptHoursMap.set(projectId, conceptHoursMap.get(projectId) + hours);
+        });
+        
+        console.log('Concept hours map built:', {
+            mapSize: conceptHoursMap.size,
+            entries: Array.from(conceptHoursMap.entries())
         });
         
         console.log(`Effort Tracking: Loaded ${teamProjects.length} projects, ${assignments.length} assignments, and ${conceptTasks.length} concept tasks for team "${userTeam}"`);

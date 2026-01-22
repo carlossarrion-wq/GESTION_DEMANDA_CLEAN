@@ -315,16 +315,27 @@ table tr:hover {
 }
 
 /* Projects Table Column Width Control */
+/* Column 2 - Título */
 #projects-table-body tr td:nth-child(2),
 #projects-tab table th:nth-child(2) {
-    max-width: 200px;
-    width: 200px;
+    max-width: 180px;
+    width: 180px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-/* Column 4 - Dominio Principal - Reduced to 70% of original width */
+/* Column 3 - Descripción - DOUBLE WIDTH */
+#projects-table-body tr td:nth-child(3),
+#projects-tab table th:nth-child(3) {
+    max-width: 360px;
+    width: 360px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Column 4 - Dominio Principal */
 #projects-table-body tr td:nth-child(4),
 #projects-tab table th:nth-child(4) {
     max-width: 140px;
@@ -334,10 +345,62 @@ table tr:hover {
     white-space: nowrap;
 }
 
+/* Columns 5-10 - All same width for uniformity */
+/* Column 5 - Horas Comp. */
 #projects-table-body tr td:nth-child(5),
 #projects-tab table th:nth-child(5) {
-    max-width: 120px;
-    width: 120px;
+    max-width: 100px;
+    width: 100px;
+    text-align: center;
+}
+
+/* Column 6 - Horas Est. */
+#projects-table-body tr td:nth-child(6),
+#projects-tab table th:nth-child(6) {
+    max-width: 100px;
+    width: 100px;
+    text-align: center;
+}
+
+/* Column 7 - Fecha Inicio */
+#projects-table-body tr td:nth-child(7),
+#projects-tab table th:nth-child(7) {
+    max-width: 100px;
+    width: 100px;
+    text-align: center;
+}
+
+/* Column 8 - Fecha Fin */
+#projects-table-body tr td:nth-child(8),
+#projects-tab table th:nth-child(8) {
+    max-width: 100px;
+    width: 100px;
+    text-align: center;
+}
+
+/* Column 9 - Estado - 50% wider */
+#projects-table-body tr td:nth-child(9),
+#projects-tab table th:nth-child(9) {
+    max-width: 150px;
+    width: 150px;
+    text-align: center;
+}
+
+/* Center status badge within cell */
+#projects-table-body tr td:nth-child(9) {
+    vertical-align: middle;
+}
+
+#projects-table-body tr td:nth-child(9) .status-badge {
+    display: inline-block;
+    margin: 0 auto;
+}
+
+/* Column 10 - Tipo */
+#projects-table-body tr td:nth-child(10),
+#projects-tab table th:nth-child(10) {
+    max-width: 100px;
+    width: 100px;
     text-align: center;
 }
 

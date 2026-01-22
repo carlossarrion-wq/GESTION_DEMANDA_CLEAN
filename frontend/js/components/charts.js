@@ -176,11 +176,16 @@ export async function initializeAllCharts() {
     
     try {
         // Overview tab charts - now async with real data
+        console.log('📊 Initializing overview committed hours chart...');
         await initializeOverviewCommittedHoursChart();
+        console.log('✅ Overview committed hours chart done');
         
         // Import and initialize new overview charts
+        console.log('📊 Importing overviewCharts.js...');
         const { initializeOverviewCharts } = await import('./overviewCharts.js');
+        console.log('✅ overviewCharts.js imported, calling initializeOverviewCharts...');
         await initializeOverviewCharts();
+        console.log('✅ initializeOverviewCharts completed');
         
         // Projects tab charts
         initializeProjectsByStatusChart();
@@ -236,11 +241,16 @@ async function initializeOverviewCommittedHoursChart() {
         
         // Determine which months to show based on period filter
         let monthsToShow = monthLabels;
+        let filteredPotentialHours = potentialAvailableHours;
+        let filteredCommittedHours = committedHours;
+        
         if (window.currentPeriod && window.getPeriodDateRange) {
             const dateRange = window.getPeriodDateRange(window.currentPeriod);
             if (dateRange.length > 0) {
                 const monthIndices = dateRange.map(d => d.month - 1);
                 monthsToShow = monthIndices.map(i => monthLabels[i]);
+                filteredPotentialHours = monthIndices.map(i => potentialAvailableHours[i]);
+                filteredCommittedHours = monthIndices.map(i => committedHours[i]);
                 console.log('Filtering months for period:', window.currentPeriod, 'Indices:', monthIndices, 'Labels:', monthsToShow);
             }
         }
@@ -248,8 +258,8 @@ async function initializeOverviewCommittedHoursChart() {
         console.log('Overview Committed Hours Chart - Using resourceCapacity.js logic:', {
             period: window.currentPeriod || 'all',
             monthsToShow,
-            committedHours,
-            potentialAvailableHours
+            committedHours: filteredCommittedHours,
+            potentialAvailableHours: filteredPotentialHours
         });
 
         chartInstances[chartId] = new Chart(ctx, {
@@ -259,14 +269,14 @@ async function initializeOverviewCommittedHoursChart() {
                 datasets: [
                     {
                         label: 'Horas Comprometidas',
-                        data: committedHours,
+                        data: filteredCommittedHours,
                         backgroundColor: '#6b7280',
                         borderColor: '#4b5563',
                         borderWidth: 1
                     },
                     {
                         label: 'Horas potenciales disponibles (excl. ausencias)',
-                        data: potentialAvailableHours,
+                        data: filteredPotentialHours,
                         backgroundColor: '#10b981',
                         borderColor: '#059669',
                         borderWidth: 1

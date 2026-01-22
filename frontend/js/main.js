@@ -54,6 +54,7 @@ let jiraModal = null;
  * Initialize the application
  */
 async function initializeApp() {
+    console.log('🚀🚀🚀 INIT APP START - VERSION 2.0 🚀🚀🚀');
     console.log('Initializing Capacity Planning Application...');
     
     // Check if we need to restore a specific tab
@@ -113,16 +114,26 @@ async function initializeApp() {
     await loadInitialData();
     
     // Update UI with loaded data
+    console.log('🔵 About to call updateMatrixKPIs...');
     updateMatrixKPIs();
+    console.log('✅ updateMatrixKPIs completed');
+    
+    console.log('🔵 About to call populateMatrixTable...');
     await populateMatrixTable();
+    console.log('✅ populateMatrixTable completed');
+    
+    console.log('🔵 About to call initializeEffortTrackingTable...');
     await initializeEffortTrackingTable();
+    console.log('✅ initializeEffortTrackingTable completed');
     
     // Initialize event listeners
     initializeEventListeners();
     
     // Apply initial period filter to KPIs
     const initialPeriod = window.currentPeriod || 'next12';
+    console.log('🎯 About to call updateDashboardByPeriod with period:', initialPeriod);
     await updateDashboardByPeriod(initialPeriod);
+    console.log('✅ updateDashboardByPeriod completed');
     
     // Check if we need to activate the projects tab after Jira import
     const activateProjectsTab = sessionStorage.getItem('activate_projects_tab');
@@ -273,11 +284,11 @@ function initializeEventListeners() {
     document.addEventListener('click', function(e) {
         const expandIcon = e.target.closest('.expand-icon');
         if (expandIcon) {
-            const projectId = expandIcon.getAttribute('data-project');
+            const projectCode = expandIcon.getAttribute('data-project');
             const resourceId = expandIcon.getAttribute('data-resource');
             
-            if (projectId) {
-                toggleProjectSkills(projectId);
+            if (projectCode) {
+                toggleProjectSkills(projectCode);
             } else if (resourceId) {
                 toggleResourceProjects(resourceId, expandIcon);
             }
@@ -402,18 +413,18 @@ function filterProjects(searchTerm) {
 /**
  * Toggle project resources breakdown - show resources assigned to project
  */
-async function toggleProjectSkills(projectId) {
-    console.log('Toggling resources for project:', projectId);
+async function toggleProjectSkills(projectCode) {
+    console.log('Toggling resources for project:', projectCode);
     
     // Find all resource rows for this project
-    const resourceRows = document.querySelectorAll(`.resource-row[data-project="${projectId}"]`);
+    const resourceRows = document.querySelectorAll(`.resource-row[data-project="${projectCode}"]`);
     
     // Find the expand icon
-    const expandIcon = document.querySelector(`.expand-icon[data-project="${projectId}"]`);
+    const expandIcon = document.querySelector(`.expand-icon[data-project="${projectCode}"]`);
     
     if (resourceRows.length === 0) {
         // No rows exist yet, need to create them
-        await loadProjectResources(projectId, expandIcon);
+        await loadProjectResources(projectCode, expandIcon);
     } else {
         // Rows exist, toggle visibility
         const isHidden = resourceRows[0].style.display === 'none';
@@ -737,8 +748,8 @@ async function updateProjectsTable(projects) {
     // Update KPIs immediately after loading projects (without ABSENCES)
     updateMatrixKPIs();
     
-    // Calculate conceptualization hours for each project
-    const conceptHoursMap = await calculateConceptualizationHours(allProjects);
+    // Calculate both committed and estimated hours for each project
+    const { committedHoursMap, estimatedHoursMap } = await calculateProjectHours(allProjects);
     
     // Clear existing rows
     tableBody.innerHTML = '';
@@ -795,12 +806,16 @@ async function updateProjectsTable(projects) {
         });
         
         // Format dates if they exist
-        const startDate = project.startDate ? new Date(project.startDate).toLocaleDateString('es-ES') : '-';
-        const endDate = project.endDate ? new Date(project.endDate).toLocaleDateString('es-ES') : '-';
+        // API returns start_date and end_date (snake_case)
+        const startDate = (project.startDate || project.start_date) ? new Date(project.startDate || project.start_date).toLocaleDateString('es-ES') : '-';
+        const endDate = (project.endDate || project.end_date) ? new Date(project.endDate || project.end_date).toLocaleDateString('es-ES') : '-';
         
-        // Get conceptualization hours for this project
-        const conceptHours = conceptHoursMap.get(project.id) || 0;
-        const conceptHoursDisplay = conceptHours > 0 ? formatNumber(Math.round(conceptHours)) : '-';
+        // Get committed hours (from assignments) and estimated hours (from concept_tasks)
+        const committedHours = committedHoursMap.get(project.id) || 0;
+        const committedHoursDisplay = committedHours > 0 ? formatNumber(Math.round(committedHours)) : '-';
+        
+        const estimatedHours = estimatedHoursMap.get(project.id) || 0;
+        const estimatedHoursDisplay = estimatedHours > 0 ? formatNumber(Math.round(estimatedHours)) : '-';
         
         // Check if this is an ABSENCES project
         const isAbsencesProject = project.code.startsWith('ABSENCES-');
@@ -816,7 +831,8 @@ async function updateProjectsTable(projects) {
             <td style="text-align: left;">${project.title}</td>
             <td style="text-align: left;">${truncateText(project.description || '', 50)}</td>
             <td style="text-align: left;">${isAbsencesProject ? '-' : domainText}</td>
-            <td style="text-align: center;"><strong>${conceptHoursDisplay}</strong></td>
+            <td style="text-align: center;"><strong>${committedHoursDisplay}</strong></td>
+            <td style="text-align: center;"><strong>${estimatedHoursDisplay}</strong></td>
             <td style="text-align: center;">${isAbsencesProject ? '-' : startDate}</td>
             <td style="text-align: center;">${isAbsencesProject ? '-' : endDate}</td>
             <td style="text-align: center;">
@@ -1036,16 +1052,52 @@ if (document.readyState === 'loading') {
  * Populate Matrix table with real data from API
  */
 async function populateMatrixTable() {
-    const tableBody = document.querySelector('.capacity-matrix tbody');
-    if (!tableBody) {
-        console.warn('Matrix table body not found');
+    console.log('🔍 populateMatrixTable START');
+    
+    const tableBody = document.getElementById('planning-table-body');
+    const tableHeader = document.getElementById('planning-table-header');
+    
+    if (!tableBody || !tableHeader) {
+        console.warn('Matrix table body or header not found');
         return;
     }
     
+    console.log('✅ Table body and header found');
+    
     try {
-        // Use assignmentsManager to load assignments and calculate monthly hours
+        console.log('📥 Loading assignments...');
         await assignmentsManager.loadAssignments();
+        console.log('✅ Assignments loaded');
+        
         const projectMonthHours = assignmentsManager.calculateMonthlyHoursByProject(2026);
+        
+        // Determine which months to show based on period filter
+        const monthLabels = ['Ene 2026', 'Feb 2026', 'Mar 2026', 'Abr 2026', 'May 2026', 'Jun 2026', 
+                            'Jul 2026', 'Ago 2026', 'Sep 2026', 'Oct 2026', 'Nov 2026', 'Dic 2026'];
+        let monthIndices = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]; // All 12 months by default
+        let visibleMonthLabels = monthLabels;
+        
+        if (window.currentPeriod && window.getPeriodDateRange) {
+            const dateRange = window.getPeriodDateRange(window.currentPeriod);
+            if (dateRange.length > 0) {
+                monthIndices = dateRange.map(d => d.month - 1); // Convert to 0-based index
+                visibleMonthLabels = monthIndices.map(i => monthLabels[i]);
+                console.log('Filtering table columns for period:', window.currentPeriod, 'Months:', visibleMonthLabels);
+            }
+        }
+        
+        // Update table header with filtered months
+        const headerRow = tableHeader.querySelector('tr');
+        if (headerRow) {
+            const monthHeaders = visibleMonthLabels.map(label => `<th>${label}</th>`).join('');
+            headerRow.innerHTML = `
+                <th class="project-name">Proyecto</th>
+                <th>Tipo</th>
+                <th>Dominio principal</th>
+                <th>Total Horas</th>
+                ${monthHeaders}
+            `;
+        }
         
         // Convert Map to object for easier iteration
         const projectMonthHoursObj = {};
@@ -1053,20 +1105,11 @@ async function populateMatrixTable() {
             projectMonthHoursObj[projectId] = hours;
         });
         
-        // Clear existing rows (except last row which is summary)
-        const existingRows = Array.from(tableBody.querySelectorAll('tr'));
-        existingRows.forEach((row, index) => {
-            // Keep the last row (summary row)
-            if (index < existingRows.length - 1) {
-                row.remove();
-            }
-        });
+        // Clear existing rows
+        tableBody.innerHTML = '';
         
-        // Get summary row
-        const summaryRow = tableBody.querySelector('.summary-row');
-        
-        // Calculate monthly totals
-        const monthlyTotals = new Array(12).fill(0);
+        // Calculate monthly totals (only for visible months)
+        const monthlyTotals = new Array(monthIndices.length).fill(0);
         
         // Generate rows for each project with hours
         // Use allProjectsWithAbsences to include ABSENCES projects
@@ -1087,57 +1130,61 @@ async function populateMatrixTable() {
                     return 'high';
                 };
                 
-            // Calculate total hours for this project
-            const projectTotal = hours.reduce((sum, h) => sum + h, 0);
-            
-            // Build month cells
-            const monthCells = hours.map((h, index) => {
-                monthlyTotals[index] += h;
-                const className = getCapacityClass(h);
-                const display = h > 0 ? Math.round(h) : '-';
-                const title = h > 0 ? `${Math.round(h)} horas` : '0 horas';
-                return `<td><span class="capacity-cell ${className}" data-project="${project.code}" data-month="${index + 1}" title="${title}">${display}</span></td>`;
-            }).join('');
-            
-            // Check if this is an ABSENCES project
-            const isAbsencesProject = project.code.startsWith('ABSENCES');
-            
-            row.innerHTML = `
-                <td class="project-name">
-                    <span class="expand-icon" data-project="${project.code}">+</span>
-                    <strong>${project.code}</strong> - ${truncateText(project.title, 30)}
-                </td>
-                <td>${isAbsencesProject ? '-' : (project.type || '-')}</td>
-                <td>${isAbsencesProject ? '-' : getDomainText(project.domain)}</td>
-                <td style="text-align: center; font-weight: bold;">${formatNumber(Math.round(projectTotal))}</td>
-                ${monthCells}
-            `;
+                // Calculate total hours for this project (only visible months)
+                const projectTotal = monthIndices.reduce((sum, idx) => sum + hours[idx], 0);
                 
-                // Insert before summary row
-                if (summaryRow) {
-                    tableBody.insertBefore(row, summaryRow);
-                } else {
-                    tableBody.appendChild(row);
-                }
+                // Build month cells (only for visible months)
+                const monthCells = monthIndices.map((monthIdx, visibleIdx) => {
+                    const h = hours[monthIdx];
+                    monthlyTotals[visibleIdx] += h;
+                    const className = getCapacityClass(h);
+                    const display = h > 0 ? Math.round(h) : '-';
+                    const title = h > 0 ? `${Math.round(h)} horas` : '0 horas';
+                    return `<td><span class="capacity-cell ${className}" data-project="${project.code}" data-month="${monthIdx + 1}" title="${title}">${display}</span></td>`;
+                }).join('');
+                
+                // Check if this is an ABSENCES project
+                const isAbsencesProject = project.code.startsWith('ABSENCES');
+                
+                row.innerHTML = `
+                    <td class="project-name">
+                        <span class="expand-icon" data-project="${project.code}">+</span>
+                        <strong>${project.code}</strong> - ${truncateText(project.title, 30)}
+                    </td>
+                    <td>${isAbsencesProject ? '-' : (project.type || '-')}</td>
+                    <td>${isAbsencesProject ? '-' : getDomainText(project.domain)}</td>
+                    <td style="text-align: center; font-weight: bold;">${formatNumber(Math.round(projectTotal))}</td>
+                    ${monthCells}
+                `;
+                
+                tableBody.appendChild(row);
             });
         }
         
-        // Update summary row with real totals
-        if (summaryRow) {
-            const summaryCells = summaryRow.querySelectorAll('td');
-            // Cell 0: "TOTAL HORAS" (project name)
-            // Cell 1: colspan="2" (covers type and domain columns)
-            // Cells 2-13: Month cells (ENE-DIC)
-            monthlyTotals.forEach((total, index) => {
-                const cellIndex = index + 2; // Skip first 2 cells (name + colspan)
-                if (summaryCells[cellIndex]) {
-                    summaryCells[cellIndex].innerHTML = `<strong>${formatNumber(Math.round(total))}</strong>`;
-                }
-            });
-        }
+        // Add summary row with totals
+        const summaryRow = document.createElement('tr');
+        summaryRow.className = 'summary-row';
+        summaryRow.style.fontWeight = 'bold';
+        summaryRow.style.backgroundColor = '#f3f4f6';
+        
+        const summaryMonthCells = monthlyTotals.map(total => 
+            `<td style="text-align: center;"><strong>${formatNumber(Math.round(total))}</strong></td>`
+        ).join('');
+        
+        const grandTotal = monthlyTotals.reduce((sum, t) => sum + t, 0);
+        
+        summaryRow.innerHTML = `
+            <td class="project-name"><strong>TOTAL HORAS</strong></td>
+            <td colspan="2"></td>
+            <td style="text-align: center;"><strong>${formatNumber(Math.round(grandTotal))}</strong></td>
+            ${summaryMonthCells}
+        `;
+        
+        tableBody.appendChild(summaryRow);
         
         console.log('Matrix table populated with real data:', {
-            projects: Object.keys(projectMonthHours).length,
+            projects: projectMonthHours.size,
+            visibleMonths: visibleMonthLabels.length,
             monthlyTotals
         });
         
@@ -1147,18 +1194,20 @@ async function populateMatrixTable() {
 }
 
 /**
- * Calculate total conceptualization hours for all projects
- * Total hours = SUM(hours) for all concept tasks of the project
+ * Calculate project hours (both committed and estimated)
  * @param {Array} projects - Array of project objects
- * @returns {Map} Map of projectId -> total conceptualization hours
+ * @returns {Object} Object with committedHoursMap and estimatedHoursMap
  */
-async function calculateConceptualizationHours(projects) {
+async function calculateProjectHours(projects) {
     try {
-        // Use projectsManager to calculate conceptualization hours
-        return await projectsManager.calculateConceptualizationHours();
+        // Use projectsManager to calculate both committed and estimated hours
+        return await projectsManager.calculateProjectHours();
     } catch (error) {
-        console.error('Error calculating conceptualization hours:', error);
-        return new Map(); // Return empty map so the table still renders with "-" for hours
+        console.error('Error calculating project hours:', error);
+        return { 
+            committedHoursMap: new Map(), 
+            estimatedHoursMap: new Map() 
+        };
     }
 }
 
@@ -1167,9 +1216,6 @@ async function calculateConceptualizationHours(projects) {
  * @param {string} period - Selected period value ('current', 'next', 'next3', 'next6', 'next12')
  */
 async function updateDashboardByPeriod(period) {
-    console.log('='.repeat(80));
-    console.log(`🔄 UPDATING DASHBOARD FOR PERIOD: ${period}`);
-    console.log('='.repeat(80));
     
     try {
         const awsAccessKey = sessionStorage.getItem('aws_access_key');
@@ -1182,8 +1228,6 @@ async function updateDashboardByPeriod(period) {
         
         // Get date range for the selected period (including 'current' which returns 1 month)
         const dateRange = getPeriodDateRange(period);
-        console.log('📅 Date range for period', period, ':', dateRange);
-        console.log('📊 Number of months to show:', dateRange.length);
         
         // Fetch all assignments
         const response = await fetch(`${API_CONFIG.BASE_URL}/assignments`, {
@@ -1200,6 +1244,7 @@ async function updateDashboardByPeriod(period) {
         const data = await response.json();
         const allAssignments = data.data?.assignments || data.assignments || [];
         
+        
         // Filter assignments by date range
         const filteredAssignments = allAssignments.filter(assignment => {
             return dateRange.some(range => 
@@ -1207,18 +1252,15 @@ async function updateDashboardByPeriod(period) {
             );
         });
         
-        console.log(`✅ Filtered ${filteredAssignments.length} assignments from ${allAssignments.length} total for period: ${period}`);
-        
         // Store filtered assignments globally for charts
         window.filteredAssignmentsByPeriod = filteredAssignments;
         window.currentPeriod = period;
         
-        console.log('🌐 Global variables set:');
-        console.log('  - window.filteredAssignmentsByPeriod:', window.filteredAssignmentsByPeriod?.length, 'assignments');
-        console.log('  - window.currentPeriod:', window.currentPeriod);
-        
         // Update KPIs with filtered data
         await updateKPIsWithFilteredData(filteredAssignments);
+        
+        // Update the planning table with filtered data
+        await populateMatrixTable();
         
         // Update charts with filtered data
         await updateChartsWithFilteredData(filteredAssignments, period);
@@ -1240,21 +1282,35 @@ async function updateKPIsWithFilteredData(assignments) {
     let hoursEvolutivos = 0;
     let horasProyectos = 0;
     
+    // IMPORTANT: Only count projects that have committed hours in the selected period
+    // and are not ABSENCES projects
+    
     assignments.forEach(assignment => {
-        if (assignment.projectId) uniqueProjects.add(assignment.projectId);
-        if (assignment.resourceId) uniqueResources.add(assignment.resourceId);
-        
         const hours = parseFloat(assignment.hours) || 0;
-        totalHours += hours;
         
-        if (assignment.resourceId) {
-            assignedHours += hours;
-        }
+        // Map snake_case to camelCase
+        const projectId = assignment.project_id || assignment.projectId;
+        const resourceId = assignment.resource_id || assignment.resourceId;
         
-        // Calculate hours by project type
-        if (window.allProjects && assignment.projectId) {
-            const project = window.allProjects.find(p => p.id === assignment.projectId);
+        
+        // Only process assignments with hours > 0
+        if (hours > 0 && projectId && window.allProjects) {
+            const project = window.allProjects.find(p => p.id === projectId);
+            
+            
+            // EXCLUDE ABSENCES projects from KPIs
             if (project && !project.code.startsWith('ABSENCES')) {
+                // Add to unique projects (only if has hours in this period)
+                uniqueProjects.add(projectId);
+                
+                // Sum total hours
+                totalHours += hours;
+                
+                if (resourceId) {
+                    assignedHours += hours;
+                }
+                
+                // Calculate hours by project type
                 if (project.type === 'Evolutivo') {
                     hoursEvolutivos += hours;
                 } else if (project.type === 'Proyecto') {
@@ -1262,9 +1318,15 @@ async function updateKPIsWithFilteredData(assignments) {
                 }
             }
         }
+        
+        // Count unique resources (regardless of project type)
+        if (resourceId) {
+            uniqueResources.add(resourceId);
+        }
     });
     
     // Count projects by type from unique project IDs (excluding ABSENCES)
+    // These are ACTIVE projects = projects with committed hours in the selected period
     let evolutivosCount = 0;
     let proyectosCount = 0;
     let totalProjectsWithoutAbsences = 0;
@@ -1287,9 +1349,10 @@ async function updateKPIsWithFilteredData(assignments) {
     const resourceUtilization = new Map(); // resourceId -> total hours assigned
     
     assignments.forEach(assignment => {
-        if (assignment.resourceId) {
-            const current = resourceUtilization.get(assignment.resourceId) || 0;
-            resourceUtilization.set(assignment.resourceId, current + (parseFloat(assignment.hours) || 0));
+        const resourceId = assignment.resource_id || assignment.resourceId;
+        if (resourceId) {
+            const current = resourceUtilization.get(resourceId) || 0;
+            resourceUtilization.set(resourceId, current + (parseFloat(assignment.hours) || 0));
         }
     });
     
@@ -1321,7 +1384,7 @@ async function updateKPIsWithFilteredData(assignments) {
             const { potentialAvailableHours } = await calculateCapacityHoursFromResourceCapacity(awsAccessKey, userTeam);
             
             // Sum only the months in the selected period
-            const dateRange = getPeriodDateRange(window.currentPeriod || 'current');
+            const dateRange = getPeriodDateRange(window.currentPeriod || 'next12');
             const monthIndices = dateRange.map(d => d.month - 1); // Convert to 0-based
             
             totalCapacity = monthIndices.reduce((sum, idx) => sum + (potentialAvailableHours[idx] || 0), 0);
@@ -1347,7 +1410,7 @@ async function updateKPIsWithFilteredData(assignments) {
                 const resourcesData = await resourcesResponse.json();
                 const allResources = resourcesData.data?.resources || resourcesData.resources || [];
                 const teamResources = allResources.filter(r => r.team === userTeam && r.active);
-                const dateRange = getPeriodDateRange(window.currentPeriod || 'current');
+                const dateRange = getPeriodDateRange(window.currentPeriod || 'next12');
                 const numberOfMonths = dateRange.length;
                 totalCapacity = teamResources.length * 160 * numberOfMonths;
             }
@@ -1437,8 +1500,6 @@ async function updateChartsWithFilteredData(assignments, period) {
     
     // Re-initialize charts with filtered data
     await initializeAllCharts();
-    
-    console.log('Charts updated with filtered data');
 }
 
 // Make pagination functions globally available for onclick handlers

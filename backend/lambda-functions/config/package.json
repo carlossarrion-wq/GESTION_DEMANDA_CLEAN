@@ -1,0 +1,9 @@
+{
+  "name": "config-handler",
+  "version": "1.0.0",
+  "description": "Lambda handler for config",
+  "main": "configHandler.js",
+  "dependencies": {
+    "pg": "^8.11.3"
+  }
+}

@@ -17,10 +17,18 @@ function destroyChart(chartId) {
 }
 
 /**
- * Load assignments and resources from API
- * If a period filter is active, use the filtered assignments
+ * Load assignments - use already filtered data from window if available
  */
 async function loadAPIData() {
+    // Use the already filtered assignments from window if available
+    if (window.filteredAssignmentsByPeriod && window.filteredAssignmentsByPeriod.length > 0) {
+        return { 
+            assignments: window.filteredAssignmentsByPeriod,
+            resources: [] // Not needed for these charts
+        };
+    }
+    
+    // Fallback: load from API if not available
     const awsAccessKey = sessionStorage.getItem('aws_access_key');
     const userTeam = sessionStorage.getItem('user_team');
     
@@ -30,43 +38,21 @@ async function loadAPIData() {
     }
     
     try {
-        // ALWAYS load ALL assignments to calculate hours correctly
-        // The period filter should only affect which months are DISPLAYED, not which data is used
-        const [assignmentsRes, resourcesRes] = await Promise.all([
-            fetch(`${API_CONFIG.BASE_URL}/assignments`, {
-                headers: {
-                    'Authorization': awsAccessKey,
-                    'x-user-team': userTeam
-                }
-            }),
-            fetch(`${API_CONFIG.BASE_URL}/resources`, {
-                headers: {
-                    'Authorization': awsAccessKey,
-                    'x-user-team': userTeam
-                }
-            })
-        ]);
+        const assignmentsRes = await fetch(`${API_CONFIG.BASE_URL}/assignments`, {
+            headers: {
+                'Authorization': awsAccessKey,
+                'x-user-team': userTeam
+            }
+        });
         
-        if (!assignmentsRes.ok || !resourcesRes.ok) {
+        if (!assignmentsRes.ok) {
             throw new Error('Error loading data for overview charts');
         }
         
         const assignmentsData = await assignmentsRes.json();
-        const resourcesData = await resourcesRes.json();
-        
         const allAssignments = assignmentsData.data?.assignments || assignmentsData.assignments || [];
-        const allResources = resourcesData.data?.resources || resourcesData.resources || [];
         
-        // Filter resources by team
-        const resources = allResources.filter(r => r.team === userTeam);
-        
-        // Filter assignments by team resources
-        const teamResourceIds = new Set(resources.map(r => r.id));
-        const assignments = allAssignments.filter(a => a.resourceId && teamResourceIds.has(a.resourceId));
-        
-        console.log('Overview charts - Loaded ALL assignments:', assignments.length);
-        
-        return { assignments, resources };
+        return { assignments: allAssignments, resources: [] };
     } catch (error) {
         console.error('Error loading API data for overview charts:', error);
         return { assignments: [], resources: [] };
@@ -80,7 +66,10 @@ async function loadAPIData() {
 export async function initializeOverviewHoursByTypeChart() {
     const chartId = 'overview-hours-by-type-chart';
     const ctx = document.getElementById(chartId);
-    if (!ctx) return;
+    if (!ctx) {
+        console.error('Canvas element NOT found:', chartId);
+        return;
+    }
     
     destroyChart(chartId);
     
@@ -111,9 +100,12 @@ export async function initializeOverviewHoursByTypeChart() {
                 const monthIndex = assignment.month - 1;
                 const hours = parseFloat(assignment.hours) || 0;
                 
+                // Map snake_case to camelCase
+                const projectId = assignment.project_id || assignment.projectId;
+                
                 // Get project type (exclude ABSENCES projects)
-                if (window.allProjects && assignment.projectId) {
-                    const project = window.allProjects.find(p => p.id === assignment.projectId);
+                if (window.allProjects && projectId) {
+                    const project = window.allProjects.find(p => p.id === projectId);
                     if (project && !project.code.startsWith('ABSENCES')) {
                         if (project.type === 'Evolutivo') {
                             hoursByMonthEvolutivo[monthIndex] += hours;
@@ -136,13 +128,6 @@ export async function initializeOverviewHoursByTypeChart() {
         const filteredConceptualizacion = monthIndices.map(i => hoursByMonthConceptualizacion[i]);
         const filteredResto = monthIndices.map(i => hoursByMonthResto[i]);
         
-        console.log('Overview Hours by Type Chart - Data:', {
-            period: window.currentPeriod || 'current',
-            monthsToShow,
-            hoursByMonthEvolutivo: filteredEvolutivo,
-            hoursByMonthConceptualizacion: filteredConceptualizacion,
-            hoursByMonthResto: filteredResto
-        });
         
         overviewChartInstances[chartId] = new Chart(ctx, {
             type: 'bar',
@@ -223,7 +208,10 @@ export async function initializeOverviewHoursByTypeChart() {
 export async function initializeOverviewSplitHoursChart() {
     const chartId = 'overview-split-hours-chart';
     const ctx = document.getElementById(chartId);
-    if (!ctx) return;
+    if (!ctx) {
+        console.error('Canvas element NOT found:', chartId);
+        return;
+    }
     
     destroyChart(chartId);
     
@@ -255,9 +243,12 @@ export async function initializeOverviewSplitHoursChart() {
             
             const hours = parseFloat(assignment.hours) || 0;
             
+            // Map snake_case to camelCase
+            const projectId = assignment.project_id || assignment.projectId;
+            
             // Get project type (exclude ABSENCES projects)
-            if (window.allProjects && assignment.projectId) {
-                const project = window.allProjects.find(p => p.id === assignment.projectId);
+            if (window.allProjects && projectId) {
+                const project = window.allProjects.find(p => p.id === projectId);
                 if (!project || project.code.startsWith('ABSENCES')) return;
                 
                 if (project.type === 'Evolutivo') {
@@ -279,17 +270,6 @@ export async function initializeOverviewSplitHoursChart() {
         const percentConceptualizacion = total > 0 ? ((horasProyectosConceptualizacion / total) * 100).toFixed(1) : 0;
         const percentResto = total > 0 ? ((horasProyectosResto / total) * 100).toFixed(1) : 0;
         
-        console.log('Overview Split Hours Chart - Data:', {
-            period: window.currentPeriod || 'all',
-            monthIndices,
-            hoursEvolutivos,
-            horasProyectosConceptualizacion,
-            horasProyectosResto,
-            total,
-            percentEvolutivos,
-            percentConceptualizacion,
-            percentResto
-        });
         
         overviewChartInstances[chartId] = new Chart(ctx, {
             type: 'pie',
@@ -343,5 +323,4 @@ export async function initializeOverviewSplitHoursChart() {
 export async function initializeOverviewCharts() {
     await initializeOverviewHoursByTypeChart();
     await initializeOverviewSplitHoursChart();
-    console.log('Overview charts initialized');
 }

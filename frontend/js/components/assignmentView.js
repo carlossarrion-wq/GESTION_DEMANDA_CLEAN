@@ -681,7 +681,7 @@ function initializeUnifiedTable_OLD(assignments) {
  */
 function getResourceName(resourceId) {
     const resource = resourcesList.find(r => r.id === resourceId);
-    return resource ? resource.name : '';
+    return resource ? resource.name : 'Unknown';
 }
 
 /**

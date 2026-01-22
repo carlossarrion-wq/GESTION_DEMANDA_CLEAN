@@ -28,6 +28,7 @@ export class TaskModal {
         this.isInitialized = true;
     }
 
+
     /**
      * Create modal HTML structure
      */
@@ -150,9 +151,16 @@ export class TaskModal {
             const rowsMap = new Map();
             
             assignments.forEach(assignment => {
-                // Find resource name
-                const resource = this.resourcesList.find(r => r.id === assignment.resourceId);
-                const resourceName = resource?.name || 'Unknown';
+                // Get resource name - API returns resource object directly
+                // Also check resource_id (snake_case) and resourceId (camelCase)
+                const resourceId = assignment.resourceId || assignment.resource_id;
+                let resourceName = assignment.resource?.name; // API includes resource object
+                
+                // If not in assignment.resource, search in resourcesList
+                if (!resourceName) {
+                    const resource = this.resourcesList.find(r => r.id === resourceId);
+                    resourceName = resource?.name || `Unknown (${resourceId})`;
+                }
                 
                 // Create unique key for grouping
                 const key = `${resourceName}|${assignment.title}|${assignment.team || ''}`;
@@ -426,7 +434,7 @@ export class TaskModal {
     /**
      * Initialize AG Grid
      */
-    initializeGrid(tasks, startDate = null, endDate = null) {
+    async initializeGrid(tasks, startDate = null, endDate = null) {
         const gridDiv = document.getElementById('task-grid');
 
         // Destroy existing grid if any (prevent duplicates on double-click)
@@ -439,6 +447,12 @@ export class TaskModal {
         // Clear the grid container
         gridDiv.innerHTML = '';
 
+        // Load AG Grid if not already loaded
+        if (typeof agGrid === 'undefined') {
+            console.log('AG Grid not loaded, loading now...');
+            await window.loadAGGrid();
+        }
+
         console.log('Initializing grid with resources:', this.resourcesList.length);
         console.log('Resources:', this.resourcesList);
         console.log('Tasks:', this.tasksList.length);
@@ -446,7 +460,7 @@ export class TaskModal {
         // Prepare resource names for dropdown
         const resourceNames = this.resourcesList.length > 0 
             ? this.resourcesList.map(r => r.name)
-            : ['Recurso 1', 'Recurso 2', 'Recurso 3']; // Fallback values
+            : []; // No fallback - if no resources, dropdown will be empty
         
         // Prepare task names for dropdown - always include "Proyecto" as first option
         const taskNames = ['Proyecto', ...this.tasksList];
@@ -773,7 +787,13 @@ export class TaskModal {
 
         // Save to database
         try {
-            await this.saveToDatabase(validRows);
+            const saveResult = await this.saveToDatabase(validRows);
+            
+            // Check if saveToDatabase returned early due to capacity errors
+            if (!saveResult) {
+                // Capacity errors were shown, don't proceed
+                return;
+            }
             
             // Also save to localStorage as backup
             this.saveToStorage(validRows);
@@ -1003,6 +1023,9 @@ export class TaskModal {
                 if (!hasTarea) {
                     errors.push(`Fila ${rowNum}: El campo "Tarea" es obligatorio`);
                 }
+                if (!hasRecurso) {
+                    errors.push(`Fila ${rowNum}: El campo "Recurso" es obligatorio`);
+                }
             }
         });
 
@@ -1041,10 +1064,18 @@ export class TaskModal {
 
         // Step 2: For each resource+date, check capacity
         const errors = [];
-        const dailyCapacity = 8; // TODO: Get from resource configuration
 
         for (const [mapKey, requestedHours] of hoursByResourceAndDate.entries()) {
             const [resourceId, date] = mapKey.split('_');
+            
+            // Get resource's daily capacity (defaultCapacity / 20 working days)
+            const resource = this.resourcesList.find(r => r.id === resourceId);
+            if (!resource) continue;
+            
+            // Use default_capacity (snake_case) from API response
+            const monthlyCapacity = resource.defaultCapacity || resource.default_capacity || 160;
+            const dailyCapacity = Math.floor(monthlyCapacity / 20); // Monthly capacity / 20 working days
+            console.log(`[validateCapacity] Resource ${resource.name}: Monthly=${monthlyCapacity}h, Daily=${dailyCapacity}h`);
             
             // Get existing assignments for this resource on this date (excluding current project)
             try {

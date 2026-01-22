@@ -1,0 +1,9 @@
+{
+  "name": "skills-handler",
+  "version": "1.0.0",
+  "description": "Lambda handler for skills",
+  "main": "index.js",
+  "dependencies": {
+    "pg": "^8.11.3"
+  }
+}

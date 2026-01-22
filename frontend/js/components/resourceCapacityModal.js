@@ -555,7 +555,8 @@ export class ResourceCapacityModal {
 
         // Calculate daily hours based on defaultCapacity
         // defaultCapacity is monthly hours, divide by 20 to get daily hours for weekdays
-        const defaultCapacity = this.resourceData?.defaultCapacity || 160;
+        // API returns default_capacity (snake_case), so check both
+        const defaultCapacity = this.resourceData?.defaultCapacity || this.resourceData?.default_capacity || 160;
         const dailyHours = defaultCapacity / 20;
         
         console.log(`Calculating daily hours: ${defaultCapacity} monthly hours / 20 = ${dailyHours} hours per weekday`);
@@ -757,7 +758,10 @@ export class ResourceCapacityModal {
                 throw new Error('No authentication tokens found');
             }
 
-            // Update resource basic info
+            // Update resource basic info including skills
+            // Use default_capacity (snake_case) from API response
+            const currentDefaultCapacity = this.resourceData.defaultCapacity || this.resourceData.default_capacity || 160;
+            
             const response = await fetch(`${API_CONFIG.BASE_URL}/resources/${this.resourceId}`, {
                 method: 'PUT',
                 headers: {
@@ -770,7 +774,8 @@ export class ResourceCapacityModal {
                     name: name,
                     email: email,
                     team: this.resourceData.team,  // Requerido por backend
-                    defaultCapacity: this.resourceData.defaultCapacity || 160
+                    defaultCapacity: currentDefaultCapacity,  // Preserve original value
+                    skills: selectedSkills  // Include skills in the main PUT request
                 })
             });
 
@@ -812,20 +817,7 @@ export class ResourceCapacityModal {
             // Update local data
             this.resourceData = result.data || result;
 
-            // Update skills
-            if (this.resourceId) {
-                try {
-                    await this.updateResourceSkills(this.resourceId, selectedSkills, awsAccessKey, userTeam);
-                    console.log('Skills updated successfully');
-                } catch (skillError) {
-                    console.error('Error updating skills:', skillError);
-                    // Don't fail the whole operation if skills update fails
-                    alert('✓ Información del recurso guardada correctamente\n\n⚠️ Advertencia: Hubo un problema al actualizar los skills. Por favor, inténtalo de nuevo.');
-                    return;
-                }
-            }
-
-            console.log('✓ Resource info saved successfully');
+            console.log('✓ Resource info and skills saved successfully');
             return true;
 
         } catch (error) {
@@ -1084,64 +1076,14 @@ export class ResourceCapacityModal {
 
     /**
      * Update resource skills
-     * @param {string} resourceId - Resource ID
-     * @param {Array} skills - Array of skill names
-     * @param {string} awsAccessKey - AWS access key
-     * @param {string} userTeam - User team
+     * Skills are updated via PUT /resources/{id} with skills array in body
+     * This method is kept for compatibility but does nothing since skills
+     * are already updated in saveResourceInfo()
      */
     async updateResourceSkills(resourceId, skills, awsAccessKey, userTeam) {
-        console.log('Updating resource skills:', { resourceId, skills });
-        
-        try {
-            // First, delete all existing skills for this resource
-            const deleteResponse = await fetch(`${API_CONFIG.BASE_URL}/resources/${resourceId}/skills`, {
-                method: 'DELETE',
-                headers: {
-                    'Authorization': awsAccessKey,
-                    'x-user-team': userTeam
-                }
-            });
-            
-            if (!deleteResponse.ok) {
-                console.warn('Could not delete existing skills (may not exist)');
-            }
-            
-            // Then, create new skills
-            if (skills.length > 0) {
-                const createPromises = skills.map(skillName => 
-                    fetch(`${API_CONFIG.BASE_URL}/resources/${resourceId}/skills`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': awsAccessKey,
-                            'x-user-team': userTeam
-                        },
-                        body: JSON.stringify({
-                            skillName: skillName,
-                            proficiency: null
-                        })
-                    })
-                );
-                
-                const results = await Promise.all(createPromises);
-                
-                // Check if all requests were successful
-                const allSuccessful = results.every(r => r.ok);
-                
-                if (allSuccessful) {
-                    console.log('All skills updated successfully');
-                } else {
-                    console.warn('Some skills failed to update');
-                }
-            } else {
-                console.log('No skills to add (all skills removed)');
-            }
-            
-        } catch (error) {
-            console.error('Error updating resource skills:', error);
-            // Don't throw error - skills update is not critical
-            // The resource was already saved successfully
-        }
+        console.log('Skills already updated via PUT /resources/{id}');
+        // Skills are updated in the main PUT request, no separate call needed
+        return Promise.resolve();
     }
 
     /**

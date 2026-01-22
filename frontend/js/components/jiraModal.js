@@ -10,11 +10,53 @@ export class JiraModal {
     constructor() {
         this.modal = null;
         this.selectedProjects = [];
+        this.maxImportBatch = 10; // Default value, will be loaded from config
     }
 
-    init() {
+    async init() {
+        await this.loadMaxImportBatchConfig();
         this.createModal();
         console.log('Jira Modal initialized');
+    }
+
+    /**
+     * Load max import batch configuration from API
+     */
+    async loadMaxImportBatchConfig() {
+        try {
+            const awsAccessKey = sessionStorage.getItem('aws_access_key');
+            const userTeam = sessionStorage.getItem('user_team');
+            
+            if (!awsAccessKey || !userTeam) {
+                console.warn('No credentials found, using default max import batch');
+                return;
+            }
+            
+            const response = await fetch(`${API_CONFIG.BASE_URL}/config?key=max_import_batch`, {
+                headers: {
+                    'Authorization': awsAccessKey,
+                    'x-user-team': userTeam
+                }
+            });
+            
+            if (!response.ok) {
+                console.warn('Could not load max_import_batch config, using default');
+                return;
+            }
+            
+            const result = await response.json();
+            
+            if (result.success && result.data && result.data.value) {
+                const configValue = parseInt(result.data.value, 10);
+                if (!isNaN(configValue) && configValue > 0) {
+                    this.maxImportBatch = configValue;
+                    console.log(`✅ Loaded max import batch from config: ${this.maxImportBatch}`);
+                }
+            }
+        } catch (error) {
+            console.error('Error loading max import batch config:', error);
+            // Keep default value
+        }
     }
 
     createModal() {
@@ -693,8 +735,8 @@ export class JiraModal {
             return;
         }
 
-        if (issueKeys.length > 10) {
-            alert('No se pueden importar más de 10 proyectos a la vez.\n\nActualmente has seleccionado ' + issueKeys.length + ' proyectos.\nPor favor, reduce la selección a un máximo de 10 proyectos.');
+        if (issueKeys.length > this.maxImportBatch) {
+            alert(`No se pueden importar más de ${this.maxImportBatch} proyectos a la vez.\n\nActualmente has seleccionado ${issueKeys.length} proyectos.\nPor favor, reduce la selección a un máximo de ${this.maxImportBatch} proyectos.`);
             return;
         }
 

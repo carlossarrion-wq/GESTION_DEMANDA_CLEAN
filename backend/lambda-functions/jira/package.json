@@ -1,12 +1,9 @@
 {
   "name": "jira-handler",
   "version": "1.0.0",
-  "description": "Jira integration handler",
+  "description": "Lambda handler for JIRA integration",
   "main": "jiraHandler.js",
   "dependencies": {
-    "@prisma/client": "^5.22.0"
-  },
-  "devDependencies": {
-    "prisma": "^5.22.0"
+    "pg": "^8.11.3"
   }
 }
