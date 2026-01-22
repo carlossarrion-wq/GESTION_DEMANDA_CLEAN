@@ -93,19 +93,6 @@ function initResourceModalElements() {
     const resourceModal = document.getElementById('resourceModal');
     const deleteResourceModal = document.getElementById('deleteResourceModal');
     
-    console.log('Resource modal element:', resourceModal);
-    console.log('Delete resource modal element:', deleteResourceModal);
-    
-    if (!resourceModal) {
-        console.error('Resource modal not found in DOM!');
-        return;
-    }
-    
-    if (!deleteResourceModal) {
-        console.error('Delete resource modal not found in DOM!');
-        return;
-    }
-    
     // Close on overlay click
     resourceModal?.addEventListener('click', (e) => {
         if (e.target === resourceModal) {

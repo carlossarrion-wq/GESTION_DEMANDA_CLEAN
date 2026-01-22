@@ -145,9 +145,7 @@ const validateResourceData = (data) => {
         if (data.defaultCapacity < 0) {
             errors.push({ field: 'defaultCapacity', message: 'Default capacity must be non-negative' });
         }
-        if (data.defaultCapacity > 744) {
-            errors.push({ field: 'defaultCapacity', message: 'Default capacity exceeds maximum hours in a month' });
-        }
+        // Note: Maximum capacity validation is done in the handler using dynamic config
     }
     if (errors.length > 0) {
         throw new errors_1.ValidationError('Resource validation failed', errors);
