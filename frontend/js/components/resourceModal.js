@@ -11,6 +11,7 @@ let currentResourceId = null;
 let isEditMode = false;
 let isSaving = false; // Flag to prevent double submission
 let isDeleting = false; // Flag to prevent double deletion
+let maxResourceHours = 180; // Default value, will be loaded from config
 
 // Available skills list
 const AVAILABLE_SKILLS = [
@@ -25,10 +26,54 @@ const AVAILABLE_SKILLS = [
 ];
 
 /**
+ * Load max resource hours configuration from API
+ */
+async function loadMaxResourceHoursConfig() {
+    try {
+        const awsAccessKey = sessionStorage.getItem('aws_access_key');
+        const userTeam = sessionStorage.getItem('user_team');
+        
+        if (!awsAccessKey || !userTeam) {
+            console.warn('No credentials found, using default max resource hours');
+            return;
+        }
+        
+        // Request global config (team = null)
+        const response = await fetch(`${API_CONFIG.BASE_URL}/config?key=max_resource_hours`, {
+            headers: {
+                'Authorization': awsAccessKey,
+                'x-user-team': userTeam
+            }
+        });
+        
+        if (!response.ok) {
+            console.warn('Could not load max_resource_hours config, using default');
+            return;
+        }
+        
+        const result = await response.json();
+        
+        if (result.success && result.data && result.data.value) {
+            const configValue = parseInt(result.data.value, 10);
+            if (!isNaN(configValue) && configValue > 0) {
+                maxResourceHours = configValue;
+                console.log(`✅ Loaded max resource hours from config: ${maxResourceHours}`);
+            }
+        }
+    } catch (error) {
+        console.error('Error loading max resource hours config:', error);
+        // Keep default value
+    }
+}
+
+/**
  * Initialize modal event listeners
  */
 export function initResourceModal() {
     console.log('Initializing resource modal...');
+    
+    // Load configuration
+    loadMaxResourceHoursConfig();
     
     // Wait for DOM to be ready
     if (document.readyState === 'loading') {
@@ -110,6 +155,29 @@ function initResourceModalElements() {
 }
 
 /**
+ * Update max hours UI elements
+ */
+function updateMaxHoursUI() {
+    // Update input max attribute
+    const capacityInput = document.getElementById('resourceDefaultCapacity');
+    if (capacityInput) {
+        capacityInput.setAttribute('max', maxResourceHours);
+    }
+    
+    // Update label
+    const capacityLabel = document.querySelector('label[for="resourceDefaultCapacity"]');
+    if (capacityLabel) {
+        capacityLabel.innerHTML = `Capacidad por Defecto (horas/mes) (máx.${maxResourceHours}) <span class="required">*</span>`;
+    }
+    
+    // Update help text
+    const helpText = capacityInput?.nextElementSibling;
+    if (helpText && helpText.classList.contains('form-help')) {
+        helpText.textContent = `Horas disponibles por mes (máximo: ${maxResourceHours} horas)`;
+    }
+}
+
+/**
  * Open modal for creating a new resource
  */
 export function openCreateResourceModal() {
@@ -132,6 +200,9 @@ export function openCreateResourceModal() {
     
     // Set default capacity
     document.getElementById('resourceDefaultCapacity').value = '160';
+    
+    // Update max hours UI elements
+    updateMaxHoursUI();
     
     // Set user's team as default (hidden field)
     const userTeam = sessionStorage.getItem('user_team');
@@ -177,6 +248,9 @@ export function openEditResourceModal(resource) {
     document.getElementById('resourceEmail').value = resource.email || '';
     document.getElementById('resourceTeam').value = resource.team;
     document.getElementById('resourceDefaultCapacity').value = resource.defaultCapacity || 160;
+    
+    // Update max hours UI elements
+    updateMaxHoursUI();
     
     // Populate skills checkboxes with resource's skills
     const resourceSkills = resource.resourceSkills?.map(rs => rs.skillName) || [];
@@ -277,9 +351,9 @@ function validateField(field) {
             } else if (isNaN(value) || parseInt(value) <= 0) {
                 isValid = false;
                 errorMessage = 'La capacidad debe ser un número positivo';
-            } else if (parseInt(value) > 180) {
+            } else if (parseInt(value) > maxResourceHours) {
                 isValid = false;
-                errorMessage = 'La capacidad no puede superar las 180 horas';
+                errorMessage = `La capacidad no puede superar las ${maxResourceHours} horas`;
             }
             break;
     }

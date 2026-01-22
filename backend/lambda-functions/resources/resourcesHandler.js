@@ -160,6 +160,32 @@ async function getResourceById(resourceId) {
         },
     });
 }
+async function getMaxResourceHours() {
+    try {
+        // Query the config table directly using Prisma raw query
+        const result = await prisma_1.prisma.$queryRaw`
+            SELECT config_value 
+            FROM app_config 
+            WHERE config_key = 'max_resource_hours' 
+            AND team IS NULL 
+            LIMIT 1
+        `;
+        
+        if (result && result.length > 0 && result[0].config_value) {
+            const maxHours = parseInt(result[0].config_value, 10);
+            if (!isNaN(maxHours) && maxHours > 0) {
+                console.log(`Loaded max_resource_hours from config: ${maxHours}`);
+                return maxHours;
+            }
+        }
+    }
+    catch (error) {
+        console.warn('Could not load max_resource_hours config, using default 180:', error);
+    }
+    
+    console.log('Using default max_resource_hours: 180');
+    return 180;
+}
 async function createResource(body) {
     if (!body) {
         return (0, response_1.errorResponse)('Request body is required', 400);
@@ -170,6 +196,10 @@ async function createResource(body) {
         const initials = nameParts.map((part) => part.charAt(0).toUpperCase()).join('');
         const timestamp = Date.now().toString().slice(-4);
         data.code = `${initials}${timestamp}`;
+    }
+    const maxResourceHours = await getMaxResourceHours();
+    if (data.defaultCapacity !== undefined && data.defaultCapacity > maxResourceHours) {
+        return (0, response_1.errorResponse)(`Default capacity cannot exceed ${maxResourceHours} hours`, 400);
     }
     try {
         (0, validators_1.validateResourceData)(data);
@@ -268,12 +298,13 @@ async function updateResource(resourceId, body) {
             errors.push({ field: 'team', message: 'Team cannot be empty' });
         }
     }
+    const maxResourceHours = await getMaxResourceHours();
     if (data.defaultCapacity !== undefined) {
         if (data.defaultCapacity < 0) {
             errors.push({ field: 'defaultCapacity', message: 'Default capacity must be non-negative' });
         }
-        if (data.defaultCapacity > 744) {
-            errors.push({ field: 'defaultCapacity', message: 'Default capacity exceeds maximum hours in a month' });
+        if (data.defaultCapacity > maxResourceHours) {
+            errors.push({ field: 'defaultCapacity', message: `Default capacity cannot exceed ${maxResourceHours} hours` });
         }
     }
     if (errors.length > 0) {
